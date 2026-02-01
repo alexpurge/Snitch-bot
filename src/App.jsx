@@ -23,6 +23,83 @@ const LOGO_URL = 'https://i.imgur.com/QjjDjuU.png';
 const GRAPH_API_VERSION = 'v19.0';
 const BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
+const CLIENT_TEAM_DIRECTORY = {
+  '101010101010101': [
+    {
+      id: 'user-ava-cole',
+      name: 'Ava Coleman',
+      email: 'ava.coleman@purgedigital.com',
+      role: 'Account Lead',
+      accessLabels: ['Logged Actor', 'System External']
+    },
+    {
+      id: 'user-marcus-lane',
+      name: 'Marcus Lane',
+      email: 'marcus.lane@purgedigital.com',
+      role: 'Performance Strategist',
+      accessLabels: ['Logged Actor', 'System External']
+    },
+    {
+      id: 'user-ivy-holt',
+      name: 'Ivy Holt',
+      email: 'ivy.holt@purgedigital.com',
+      role: 'Creative Ops',
+      accessLabels: ['Logged Actor', 'System External']
+    }
+  ],
+  '202020202020202': [
+    {
+      id: 'user-jonas-hill',
+      name: 'Jonas Hill',
+      email: 'jonas.hill@purgedigital.com',
+      role: 'Account Director',
+      accessLabels: ['Logged Actor', 'System External']
+    },
+    {
+      id: 'user-nia-king',
+      name: 'Nia King',
+      email: 'nia.king@purgedigital.com',
+      role: 'Lifecycle Manager',
+      accessLabels: ['Logged Actor', 'System External']
+    },
+    {
+      id: 'user-diego-watts',
+      name: 'Diego Watts',
+      email: 'diego.watts@purgedigital.com',
+      role: 'Automation Lead',
+      accessLabels: ['Logged Actor', 'System External']
+    }
+  ],
+  '303030303030303': [
+    {
+      id: 'user-luna-parker',
+      name: 'Luna Parker',
+      email: 'luna.parker@purgedigital.com',
+      role: 'Client Success',
+      accessLabels: ['Logged Actor', 'System External']
+    },
+    {
+      id: 'user-romeo-cross',
+      name: 'Romeo Cross',
+      email: 'romeo.cross@purgedigital.com',
+      role: 'Paid Social Lead',
+      accessLabels: ['Logged Actor', 'System External']
+    },
+    {
+      id: 'user-keira-snow',
+      name: 'Keira Snow',
+      email: 'keira.snow@purgedigital.com',
+      role: 'Insights Analyst',
+      accessLabels: ['Logged Actor', 'System External']
+    }
+  ]
+};
+
+const getClientTeamRoster = (accountId) => {
+  if (!accountId) return [];
+  return CLIENT_TEAM_DIRECTORY[accountId] ? [...CLIENT_TEAM_DIRECTORY[accountId]] : [];
+};
+
 // --- 1. EMBEDDED STYLESHEET ---
 const STYLES = `
   /* --- RESET & BASE --- */
@@ -253,6 +330,20 @@ const STYLES = `
     align-items: center;
     gap: 4px;
     margin-left: 8px;
+  }
+
+  .meta-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #94a3b8;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(15, 23, 42, 0.6);
   }
 
   /* BUTTON GROUPS */
@@ -488,6 +579,8 @@ const formatDate = (dateString) => {
   if (!dateString) return '-';
   return new Date(dateString).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
+
+const normalizeActorKey = (value) => (value ? value.trim().toLowerCase() : '');
 
 // --- DATA PARSING FOR CHANGE LOGS (META STYLE) ---
 const parseChangeDetails = (extraData) => {
@@ -773,7 +866,6 @@ export default function App() {
 
   const [insights, setInsights] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [team, setTeam] = useState([]);
   const [mainActorId, setMainActorId] = useState(null);
   const [userActivityCounts, setUserActivityCounts] = useState({});
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -937,45 +1029,6 @@ export default function App() {
   };
 
   // --- DATA SYNC LOGIC (SINGLE ACCOUNT) ---
-  const loadTeamRoster = useCallback(async () => {
-    if (!selectedAccount) return;
-
-    setTeam([]);
-
-    try {
-      const actorDiscoveryParams = { fields: 'actor_name,actor_id', limit: 500 };
-      const results = await Promise.allSettled([
-        callGraphAPI(`/${selectedAccount.id}/users`, { fields: 'id,name,role,tasks,permissions,email', limit: 100 }),
-        fetchChangeHistory(selectedAccount.id, actorDiscoveryParams)
-      ]);
-
-      const assignedUsers = results[0].status === 'fulfilled' ? results[0].value.data || [] : [];
-      const historicalActivities = results[1].status === 'fulfilled' ? results[1].value || [] : [];
-
-      const uniqueLogActors = new Map();
-      const addActor = (id, name) => {
-        if (id && name && !assignedUsers.find(u => u.id === id)) {
-          if (!uniqueLogActors.has(id)) {
-            uniqueLogActors.set(id, {
-              id: id,
-              name: name,
-              role: 'Logged Actor',
-              email: 'System/External',
-              permissions: []
-            });
-          }
-        }
-      };
-
-      historicalActivities.forEach(log => addActor(log.actor_id, log.actor_name));
-
-      const mergedTeam = [...assignedUsers, ...Array.from(uniqueLogActors.values())];
-      setTeam(mergedTeam);
-    } catch (err) {
-      console.error("Team Roster Error", err);
-    }
-  }, [selectedAccount, callGraphAPI, fetchChangeHistory]);
-
   const refreshAccountData = useCallback(async () => {
     if (!selectedAccount) return;
     
@@ -1041,8 +1094,11 @@ export default function App() {
         
         // Populate local variable immediately
         filteredActivities.forEach(log => {
-          if (log.actor_id) {
-            currentCounts[log.actor_id] = (currentCounts[log.actor_id] || 0) + 1;
+          if (log.actor_name) {
+            const actorKey = normalizeActorKey(log.actor_name);
+            if (actorKey) {
+              currentCounts[actorKey] = (currentCounts[actorKey] || 0) + 1;
+            }
           }
         });
         // Update React State
@@ -1053,14 +1109,17 @@ export default function App() {
 
       // 2. ACTIVITY LEADER
       let maxCount = 0;
-      let topUserId = null;
-      Object.entries(currentCounts).forEach(([id, count]) => {
+      let topUserKey = null;
+      Object.entries(currentCounts).forEach(([key, count]) => {
         if (count > maxCount) {
           maxCount = count;
-          topUserId = id;
+          topUserKey = key;
         }
       });
-      setMainActorId(topUserId);
+      const roster = getClientTeamRoster(selectedAccount.account_id);
+      const topMember = roster.find(member => normalizeActorKey(member.activityKey || member.name) === topUserKey);
+      const fallbackMemberId = roster[0]?.id || null;
+      setMainActorId(topMember?.id || fallbackMemberId);
 
       // 3. HEALTH CHECK
       if (results[2].status === 'fulfilled') {
@@ -1087,11 +1146,6 @@ export default function App() {
     if (selectedAccount) refreshAccountData();
   }, [selectedAccount, dateRange, customDates, refreshAccountData]);
 
-  // Load full team roster only when account changes (independent of date range)
-  useEffect(() => {
-    if (selectedAccount) loadTeamRoster();
-  }, [selectedAccount, loadTeamRoster]);
-
   const filteredAccounts = useMemo(() => {
     let result = accounts;
     if (accountStatusFilter === 'Active') {
@@ -1108,6 +1162,15 @@ export default function App() {
     }
     return result;
   }, [accounts, searchTerm, showAtRiskFilter, scanResults, accountStatusFilter]);
+
+  const teamRoster = useMemo(() => {
+    if (!selectedAccount) return [];
+    return getClientTeamRoster(selectedAccount.account_id);
+  }, [selectedAccount]);
+
+  const teamLookup = useMemo(() => {
+    return new Map(teamRoster.map(member => [member.id, member]));
+  }, [teamRoster]);
 
   // --- RENDER: LOGIN SCREEN ---
   if (!session.loggedIn) {
@@ -1541,7 +1604,13 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {logs.map((log, i) => (
+                      {logs.map((log, i) => {
+                        const matchedMember = log.actor_id ? teamLookup.get(log.actor_id) : null;
+                        const nameMatchedMember = !matchedMember && log.actor_name
+                          ? teamRoster.find(member => normalizeActorKey(member.activityKey || member.name) === normalizeActorKey(log.actor_name))
+                          : null;
+                        const displayMember = matchedMember || nameMatchedMember;
+                        return (
                         <tr key={i}>
                           <td className="text-mono" style={{ color: '#64748b', whiteSpace: 'nowrap' }}>
                             <div className="flex flex-col">
@@ -1556,9 +1625,9 @@ export default function App() {
                               </div>
                               <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 <span style={{ fontWeight: 600, color: '#fff' }}>{log.actor_name || 'System'}</span>
-                                {team.find(u => u.id === log.actor_id)?.email && (
+                                {displayMember?.email && (
                                   <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                                    {team.find(u => u.id === log.actor_id).email}
+                                    {displayMember.email}
                                   </span>
                                 )}
                               </div>
@@ -1583,7 +1652,8 @@ export default function App() {
                             {parseChangeDetails(log.extra_data)}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                       {logs.length === 0 && (
                         <tr>
                           <td colSpan="5" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>
@@ -1603,24 +1673,33 @@ export default function App() {
             {/* TAB: TEAM */}
             {activeTab === 'team' && (
               <div className="grid-stats">
-                {team.map(user => {
-                  const isMain = user.id === mainActorId || team.length === 1;
-                  const activityCount = userActivityCounts[user.id] || 0;
-                  
+                {teamRoster.map(member => {
+                  const isMain = member.id === mainActorId || teamRoster.length === 1;
+                  const activityKey = normalizeActorKey(member.activityKey || member.name);
+                  const activityCount = userActivityCounts[activityKey] || 0;
+                  const accessLabels = member.accessLabels && member.accessLabels.length > 0
+                    ? member.accessLabels
+                    : ['Logged Actor', 'System External'];
+
                   return (
-                    <div key={user.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center', borderColor: isMain ? 'rgba(234, 179, 8, 0.4)' : '' }}>
+                    <div key={member.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center', borderColor: isMain ? 'rgba(234, 179, 8, 0.4)' : '' }}>
                       <div style={{ width: '56px', height: '56px', background: isMain ? 'rgba(234, 179, 8, 0.2)' : '#334155', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, flexShrink: 0, color: isMain ? '#facc15' : 'white' }}>
-                        {user.name?.[0]}
+                        {member.name?.[0] || '?'}
                       </div>
                       <div style={{ overflow: 'hidden' }}>
                         <h4 style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
-                          {user.name}
+                          {member.name}
                           {isMain && <span className="badge-main"><Star size={10} fill="currentColor" /> MAIN</span>}
                         </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', marginTop: '0.25rem' }}>
-                          <p className="text-small text-accent">{user.role || (user.tasks ? user.tasks.join(', ') : 'Access')}</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.35rem' }}>
+                          <p className="text-small text-accent">{member.role}</p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            {accessLabels.map(label => (
+                              <span key={`${member.id}-${label}`} className="meta-chip">{label}</span>
+                            ))}
+                          </div>
                           <p className="text-small" style={{ fontSize: '0.65rem', textTransform: 'none', opacity: 0.7 }}>
-                            {user.email}
+                            {member.email}
                           </p>
                           <p className="text-small" style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.2rem' }}>
                             Activity Count: <span style={{ color: '#fff' }}>{activityCount}</span>
@@ -1630,6 +1709,11 @@ export default function App() {
                     </div>
                   );
                 })}
+                {teamRoster.length === 0 && (
+                  <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
+                    <p className="text-small">No hardcoded team roster found for this client.</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
