@@ -797,6 +797,26 @@ export default function App() {
     }
   }, [session.token]);
 
+  const fetchAllActivities = useCallback(async (accountId, params = {}) => {
+    const allActivities = [];
+    let afterCursor = null;
+    let hasNextPage = true;
+
+    while (hasNextPage) {
+      const pageParams = { ...params, limit: 500 };
+      if (afterCursor) pageParams.after = afterCursor;
+
+      const page = await callGraphAPI(`/${accountId}/activities`, pageParams);
+      const pageData = page?.data || [];
+      allActivities.push(...pageData);
+
+      afterCursor = page?.paging?.cursors?.after || null;
+      hasNextPage = Boolean(afterCursor) && pageData.length > 0;
+    }
+
+    return allActivities;
+  }, [callGraphAPI]);
+
   // --- PORTFOLIO RISK SCAN LOGIC (ONE-TIME, BACKGROUND CAPABLE) ---
   const performRiskScan = async (accountList) => {
     // Initial blocking state
@@ -957,8 +977,8 @@ export default function App() {
 
       // 1. FILTERED LOGS (FOR TABLE & COUNTS) - REQUEST ALL VARIABLES
       const logsParams = {
-        fields: 'event_time,event_type,translated_event_type,actor_name,actor_id,object_name,object_id,extra_data,application_name', 
-        limit: 500 // INCREASED LIMIT TO CAPTURE MORE HISTORY
+        fields: 'event_time,event_type,translated_event_type,actor_name,actor_id,object_name,object_id,object_type,object_link,extra_data,application_name',
+        limit: 500 // MAXIMUM PAGE SIZE PER REQUEST
       };
       if (activitiesSince) logsParams.since = activitiesSince;
       if (activitiesUntil) logsParams.until = activitiesUntil;
@@ -968,10 +988,10 @@ export default function App() {
 
       const results = await Promise.allSettled([
         callGraphAPI(`/${selectedAccount.id}/insights`, insightsParams), // 0
-        callGraphAPI(`/${selectedAccount.id}/activities`, logsParams), // 1: Filtered Logs (for table & counts)
+        fetchAllActivities(selectedAccount.id, logsParams), // 1: Filtered Logs (for table & counts)
         callGraphAPI(`/${selectedAccount.id}/users`, { fields: 'id,name,role,tasks,permissions,email', limit: 100 }), // 2: Users
         callGraphAPI(`/${selectedAccount.id}/activities`, { fields: 'event_time,event_type', limit: 50 }), // 3: Health
-        callGraphAPI(`/${selectedAccount.id}/activities`, actorDiscoveryParams) // 4: Discovery (Historic)
+        fetchAllActivities(selectedAccount.id, actorDiscoveryParams) // 4: Discovery (Historic)
       ]);
 
       // 0. INSIGHTS
@@ -981,7 +1001,7 @@ export default function App() {
       // 1. FILTERED LOGS & COUNTS
       let filteredActivities = [];
       if (results[1].status === 'fulfilled') {
-        filteredActivities = results[1].value.data || [];
+        filteredActivities = results[1].value || [];
         setLogs(filteredActivities);
         
         // Populate local variable immediately
@@ -1002,7 +1022,7 @@ export default function App() {
         let mergedTeam = [...assignedUsers];
         
         // Get Historical Actors from Result 4
-        const historicalActivities = results[4].status === 'fulfilled' ? results[4].value.data || [] : [];
+        const historicalActivities = results[4].status === 'fulfilled' ? results[4].value || [] : [];
         const uniqueLogActors = new Map();
 
         const addActor = (id, name) => {
@@ -1056,7 +1076,7 @@ export default function App() {
       // STOP LOADER
       setGlobalLoading({ active: false, status: '', progress: 0, canSkip: false });
     }
-  }, [selectedAccount, dateRange, customDates, callGraphAPI]);
+  }, [selectedAccount, dateRange, customDates, callGraphAPI, fetchAllActivities]);
 
   // Only trigger data refresh when Account OR Date changes (not during login)
   useEffect(() => {
