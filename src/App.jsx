@@ -28,17 +28,18 @@ const buildTeamRosterFromHistory = (activities = []) => {
 
   activities.forEach((log, index) => {
     const actorName = log?.actor_name || 'Unknown User';
-    const actorKey = normalizeActorKey(log?.actor_name);
-    const actorId = log?.actor_id || (actorKey ? `actor-${actorKey}` : `actor-${index}`);
+    const actorKey = normalizeActorKey(actorName);
+    const rosterKey = log?.actor_id || actorKey || `unknown-${index}`;
+    const actorId = log?.actor_id || (actorKey ? `actor-${actorKey}` : `unknown-${index}`);
 
-    if (!rosterMap.has(actorId)) {
-      rosterMap.set(actorId, {
+    if (!rosterMap.has(rosterKey)) {
+      rosterMap.set(rosterKey, {
         id: actorId,
         name: actorName,
         email: 'Email not available',
         role: 'Assigned User',
         accessLabels: ['Authorized User'],
-        activityKey: log?.actor_name || ''
+        activityKey: actorKey
       });
     }
   });
@@ -1709,12 +1710,12 @@ export default function App() {
                 })}
                 {teamLoading && teamRoster.length === 0 && (
                   <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-                    <p className="text-small">Loading team roster from Facebook...</p>
+                    <p className="text-small">Loading team roster from change history...</p>
                   </div>
                 )}
                 {!teamLoading && teamRoster.length === 0 && (
                   <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-                    <p className="text-small">No team members were returned for this account.</p>
+                    <p className="text-small">No team members were found in the change history.</p>
                   </div>
                 )}
               </div>
