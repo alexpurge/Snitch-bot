@@ -23,16 +23,27 @@ const LOGO_URL = 'https://i.imgur.com/QjjDjuU.png';
 const GRAPH_API_VERSION = 'v19.0';
 const BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-const normalizeTeamMember = (member, index) => {
-  const roleLabel = member?.role ? [member.role] : ['Authorized User'];
-  return {
-    id: member?.id || `member-${index}`,
-    name: member?.name || 'Unknown User',
-    email: member?.email || 'Email not available',
-    role: member?.role || 'Assigned User',
-    accessLabels: roleLabel,
-    activityKey: member?.name || member?.email || ''
-  };
+const buildTeamRosterFromHistory = (activities = []) => {
+  const rosterMap = new Map();
+
+  activities.forEach((log, index) => {
+    const actorName = log?.actor_name || 'Unknown User';
+    const actorKey = normalizeActorKey(log?.actor_name);
+    const actorId = log?.actor_id || (actorKey ? `actor-${actorKey}` : `actor-${index}`);
+
+    if (!rosterMap.has(actorId)) {
+      rosterMap.set(actorId, {
+        id: actorId,
+        name: actorName,
+        email: 'Email not available',
+        role: 'Assigned User',
+        accessLabels: ['Authorized User'],
+        activityKey: log?.actor_name || ''
+      });
+    }
+  });
+
+  return Array.from(rosterMap.values());
 };
 
 // --- 1. EMBEDDED STYLESHEET ---
@@ -845,18 +856,22 @@ export default function App() {
     }
 
     return activityLog;
-  }, [callGraphAPI]);
+  }, [fetchChangeHistory]);
 
   const fetchAccountTeam = useCallback(async (accountId) => {
     if (!accountId) return [];
     setTeamLoading(true);
 
     try {
-      const response = await callGraphAPI(`/${accountId}/users`, {
-        fields: 'id,name,email,role',
-        limit: 200
-      });
-      const members = (response?.data || []).map((member, index) => normalizeTeamMember(member, index));
+      const past = new Date();
+      past.setFullYear(past.getFullYear() - 20);
+      const rosterParams = {
+        fields: 'actor_id,actor_name',
+        limit: 500,
+        since: Math.floor(past.getTime() / 1000)
+      };
+      const history = await fetchChangeHistory(accountId, rosterParams);
+      const members = buildTeamRosterFromHistory(history);
       setTeamByAccount(prev => ({ ...prev, [accountId]: members }));
       return members;
     } catch (err) {
