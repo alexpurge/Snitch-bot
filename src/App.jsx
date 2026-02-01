@@ -791,12 +791,64 @@ const getActionValue = (insights, actionType, valueKey = 'value') => {
   return 0;
 };
 
+const CREATIVE_HIGH_SIGNAL_KEYS = [
+  'link_data',
+  'image_hash',
+  'image_url',
+  'asset_id',
+  'asset_url',
+  'video_ad',
+  'video_data',
+  'video_id',
+  'child_attachments',
+  'template_url'
+];
+
+const CREATIVE_SUPPORTING_KEYS = [
+  'message',
+  'title',
+  'link_description',
+  'call_to_action',
+  'name',
+  'caption',
+  'link',
+  'description',
+  'descriptions',
+  'type',
+  'value',
+  'values',
+  'id'
+];
+
+const extractCreativePayload = (extraData) => {
+  if (!extraData) return null;
+  if (typeof extraData === 'string') {
+    try {
+      return JSON.parse(extraData);
+    } catch (error) {
+      return extraData;
+    }
+  }
+  return extraData;
+};
+
+const hasCreativeKey = (payload, keys) => {
+  const serialized = typeof payload === 'string'
+    ? payload.toLowerCase()
+    : JSON.stringify(payload).toLowerCase();
+  return keys.some(key => serialized.includes(key));
+};
+
 const isSubstantiveChange = (log) => {
-  const type = log.event_type.toLowerCase();
-  if (type.includes('billing') || type.includes('payment') || type.includes('invoice')) return false;
-  if (type.includes('run_status') || type.includes('archive') || type.includes('delete')) return false;
-  if (type.includes('tag') || type.includes('label')) return false;
-  return true; 
+  const payload = extractCreativePayload(log.extra_data);
+  if (!payload) return false;
+
+  if (hasCreativeKey(payload, CREATIVE_HIGH_SIGNAL_KEYS)) return true;
+
+  const hintText = `${log.event_type || ''} ${log.object_type || ''} ${log.object_name || ''}`.toLowerCase();
+  const hasCreativeHint = ['creative', 'image', 'video', 'carousel', 'collection', 'asset', 'ad']
+    .some(key => hintText.includes(key));
+  return hasCreativeHint && hasCreativeKey(payload, CREATIVE_SUPPORTING_KEYS);
 };
 
 // --- 3. MAIN COMPONENT ---
