@@ -266,7 +266,7 @@ const STYLES = `
   /* --- LAYOUTS --- */
   .nav-bar {
     height: 5rem;
-    background: rgba(0,0,0,0.8);
+    background: #000;
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
@@ -274,6 +274,8 @@ const STYLES = `
     padding: 0 2rem;
     position: sticky;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 50;
     backdrop-filter: blur(10px);
     width: 100%;
