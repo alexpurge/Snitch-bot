@@ -1,2343 +1,987 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  LayoutDashboard, Users, History, PlusCircle, Calendar, Search, LogOut, 
-  ShieldAlert, TrendingUp, Activity, ChevronRight, CheckCircle2, 
-  XCircle, Briefcase, RefreshCw, AlertTriangle, Menu, X, ArrowUpRight, 
-  Database, Lock, Key, Clock, Loader2, MousePointerClick,
-  BadgeDollarSign, ShoppingBag, Percent, Star, ChevronLeft, Power, SkipForward,
-  Minimize2, ArrowRight
+    UploadCloud, Key, Facebook, Chrome, CreditCard, Phone, User, MapPin, 
+    Info, Eye, DollarSign, MousePointer, Percent, CheckCircle, TrendingDown, 
+    Layout, FileText, Activity, BarChart2, Users, Rocket, Ticket, 
+    MessageSquare, Settings, Sun, Moon, MoreHorizontal, Search, Check
 } from 'lucide-react';
 
-/**
- * PURGE DIGITAL - AGENCY MASTER CONTROLLER
- * v9.7 - MASTER CHANGE HISTORY & ROBUST LOADING
- * - Feature: High-fidelity Change History Table (Meta-style Diffs)
- * - Feature: Non-blocking Background Scans with Skip option
- * - Fix: Prevented table collapse (Blank Screen) with enforced min-heights
- * - Core: Preserved all existing logic, keys, and styling
- */
-
-// --- CONFIGURATION ---
-const APP_ID = '1870933960210610'; 
-const LOGO_URL = 'https://i.imgur.com/QjjDjuU.png'; 
-const GRAPH_API_VERSION = 'v19.0';
-const BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
-const AIRCALL_BASE_URL = 'https://api.aircall.io/v1';
-const AIRCALL_API_ID = import.meta.env.VITE_AIRCALL_API_ID || '';
-const AIRCALL_API_TOKEN = import.meta.env.VITE_AIRCALL_API_TOKEN || '';
-
-const CLIENT_CONTACTS = {
-  // [account_id]: { mobileNumber: '+15555550123' }
-};
-
-const normalizeHistoryTeamMember = (log, index) => {
-  const name = log?.actor_name || 'Unknown User';
-  return {
-    id: log?.actor_id || `history-${index}`,
-    name,
-    email: 'Email not available',
-    role: 'Account Access',
-    accessLabels: ['Change History'],
-    activityKey: name
-  };
-};
-
-// --- 1. EMBEDDED STYLESHEET ---
+/* -----------------------------------------------------------------------
+   PURGE OS - GLOBAL STYLES (CSS)
+   Constructed from the ground up to mimic Apple Human Interface Guidelines
+   without external dependencies.
+   Refined for Ultra-Wide & Tall Monitors + Perfect Scrolling
+   -----------------------------------------------------------------------
+*/
 const STYLES = `
-  /* --- RESET & BASE --- */
-  :root {
-    --bg-dark: #000000;
-    --bg-panel: rgba(15, 23, 42, 0.6);
-    --border-color: #1e293b;
-    --text-primary: #e2e8f0;
-    --text-secondary: #94a3b8;
-    --accent-primary: #ff5d00;
-    --accent-hover: #ff7b00;
-    --logo-bg: #1a1a1a;
-    --glass-border: 1px solid rgba(255, 255, 255, 0.1);
-  }
+:root {
+    --bg-primary: #f5f5f7;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #e5e5ea;
+    --text-primary: #1d1d1f;
+    --text-secondary: #86868b;
+    --border-color: rgba(0, 0, 0, 0.1);
+    --accent-blue: #0071e3;
+    --accent-green: #34c759;
+    --accent-red: #ff3b30;
+    --accent-orange: #ff9500;
+    --accent-yellow: #ffcc00;
+    --accent-purple: #af52de;
+    
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.5);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
 
-  /* GLOBAL BOX SIZING FIX */
-  *, *::before, *::after {
-    box-sizing: border-box;
-  }
+.dark-mode {
+    --bg-primary: #000000;
+    --bg-secondary: #1c1c1e;
+    --bg-tertiary: #2c2c2e;
+    --text-primary: #f5f5f7;
+    --text-secondary: #86868b;
+    --border-color: rgba(255, 255, 255, 0.1);
+    --glass-bg: rgba(28, 28, 30, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
 
-  html, body, #root {
-    width: 100%;
-    height: 100%;
+* { box-sizing: border-box; }
+
+html, body, #root {
     margin: 0;
     padding: 0;
-    background-color: var(--bg-dark);
-    color: var(--text-primary);
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
-  }
-
-  /* --- ANIMATIONS --- */
-  @keyframes spin { 
-    from { transform: rotate(0deg); } 
-    to { transform: rotate(360deg); } 
-  }
-  
-  @keyframes fadeIn { 
-    from { opacity: 0; transform: translateY(10px); } 
-    to { opacity: 1; transform: translateY(0); } 
-  }
-
-  .animate-spin-always {
-    animation: spin 1s linear infinite;
-  }
-
-  .content-fade-in {
-    animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  .animate-fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
-  }
-
-  /* --- LOADING OVERLAY --- */
-  .loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(16px);
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: white;
-  }
-
-  /* --- UTILITIES --- */
-  .app-wrapper { 
-    min-height: 100vh; 
     width: 100vw;
-    display: flex; 
-    flex-direction: column; 
-  }
-  
-  .glass-panel {
-    background-color: var(--bg-panel);
-    backdrop-filter: blur(12px);
-    border: var(--glass-border);
-    border-radius: 1rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-    transition: all 0.2s ease;
-    height: 100%; /* Fill grid cell */
-    display: flex;
-    flex-direction: column;
-  }
-
-  .container-fluid { 
-    width: 100%; 
-    padding: 2rem; 
-    box-sizing: border-box; 
-    flex: 1;
-  }
-  
-  /* --- TYPOGRAPHY --- */
-  h1 { margin: 0; font-weight: 900; letter-spacing: -0.05em; text-transform: uppercase; line-height: 1; }
-  h2 { margin: 0; font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; }
-  h3 { margin: 0; font-weight: 700; color: #fff; }
-  p { margin: 0; }
-  .text-mono { font-family: ui-monospace, SFMono-Regular, monospace; }
-  .text-small { font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); }
-  .text-accent { color: var(--accent-primary); }
-
-  /* --- FORMS & INPUTS --- */
-  .input-group { margin-bottom: 1.5rem; position: relative; }
-  .glass-input {
-    width: 100%;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--border-color);
-    border-radius: 0.75rem;
-    padding: 1rem 1rem 1rem 3rem;
-    color: #fff;
-    font-size: 1rem;
-    box-sizing: border-box;
-    transition: border-color 0.2s;
-  }
-  .glass-input:focus { outline: none; border-color: var(--accent-primary); }
-  .input-icon { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
-
-  .btn-primary {
-    width: 100%;
-    background-color: var(--accent-primary);
-    color: white;
-    border: none;
-    border-radius: 0.75rem;
-    padding: 1rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    transition: background-color 0.2s;
-  }
-  .btn-primary:hover { background-color: var(--accent-hover); }
-  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-  .btn-secondary {
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid var(--border-color);
+    height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-primary);
     color: var(--text-primary);
-    border-radius: 999px;
-    padding: 0.6rem 1.2rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .btn-secondary:hover { border-color: var(--accent-primary); color: #fff; }
-  .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+    transition: background-color 0.3s ease, color 0.3s ease;
+    overflow: hidden; /* Prevent body scroll, app handles it */
+}
 
-  .aircall-list {
+/* --- Utilities --- */
+.app-container {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}
+
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+}
+
+.animate-fade-in { animation: fadeIn 0.4s ease-out; }
+.animate-slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* --- Scrollbars --- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-secondary); border-radius: 4px; opacity: 0.5; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-primary); }
+
+/* --- Typography & Elements --- */
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
+p { margin: 0; }
+button { font-family: inherit; border: none; cursor: pointer; background: none; }
+input, textarea { font-family: inherit; outline: none; }
+
+/* --- Sidebar --- */
+.sidebar {
+    width: 260px;
+    height: 100%;
+    background: var(--glass-bg);
+    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    margin-top: 1.5rem;
-  }
-
-  .aircall-card {
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    background: rgba(15, 23, 42, 0.4);
-  }
-
-  .aircall-meta {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 0.75rem;
-    margin-top: 0.75rem;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-  }
-
-  /* --- LAYOUTS --- */
-  .nav-bar {
-    height: 5rem;
-    background: #000;
-    border-bottom: 1px solid var(--border-color);
-    display: flex;
-    align-items: center;
     justify-content: space-between;
-    padding: 0 2rem;
-    position: sticky;
-    top: 0;
-    left: 0;
-    right: 0;
+    padding: 20px;
     z-index: 50;
-    backdrop-filter: blur(10px);
-    width: 100%;
-    box-sizing: border-box;
-  }
+    transition: width 0.3s ease;
+    flex-shrink: 0;
+}
 
-  .grid-portfolio {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 2rem; 
-    margin-top: 2rem;
-    margin-bottom: 2rem; 
-    width: 100%;
-  }
-
-  .grid-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 2rem; 
-    width: 100%;
-    margin-bottom: 2rem;
-  }
-
-  /* --- COMPONENTS --- */
-  .card-content { padding: 1.5rem; cursor: pointer; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
-  .card-content:hover { background: rgba(255,255,255,0.03); }
-  
-  .badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.65rem;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    border: 1px solid transparent;
+.nav-item {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-  }
-  .badge-active { background: rgba(22, 163, 74, 0.1); color: #4ade80; border-color: rgba(22, 163, 74, 0.2); }
-  .badge-paused { background: rgba(234, 179, 8, 0.1); color: #facc15; border-color: rgba(234, 179, 8, 0.2); }
-  .badge-closed { background: rgba(255, 93, 0, 0.1); color: #ff8c42; border-color: rgba(255, 93, 0, 0.2); }
-
-  .badge-main { 
-    background: rgba(234, 179, 8, 0.15); 
-    color: #facc15; 
-    border: 1px solid rgba(234, 179, 8, 0.3);
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 0.6rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: 8px;
-  }
-
-  .meta-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.2rem 0.5rem;
-    border-radius: 9999px;
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    color: #94a3b8;
-    font-size: 0.6rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    background: rgba(15, 23, 42, 0.6);
-  }
-
-  /* BUTTON GROUPS */
-  .btn-group {
-    display: flex;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 0.5rem;
-    padding: 0.25rem;
-    border: 1px solid var(--border-color);
-  }
-  .btn-group button {
-    background: none;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 0.25rem;
+    padding: 12px;
+    margin-bottom: 4px;
+    border-radius: 12px;
     color: var(--text-secondary);
-    font-size: 0.75rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .btn-group button.active {
-    background: var(--text-primary);
-    color: var(--bg-dark);
-  }
-  .btn-group button:hover:not(.active) {
-    color: var(--text-primary);
-  }
-
-  .btn-export {
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    border-radius: 0.5rem;
-    padding: 0.45rem 0.75rem;
-    font-size: 0.7rem;
-    font-weight: 700;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
     transition: all 0.2s ease;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .btn-export:hover { border-color: var(--accent-primary); color: #fff; }
-  .btn-export:disabled { opacity: 0.6; cursor: not-allowed; }
+    font-size: 14px;
+    font-weight: 500;
+}
 
-  .tab-group { display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border-color); margin-bottom: 2rem; overflow-x: auto; width: 100%; }
-  .tab-btn {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    padding: 1rem 1.5rem;
-    font-weight: 700;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
+.nav-item:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.nav-item.active {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.nav-icon { margin-right: 12px; }
+
+/* --- List View (Left Pane) --- */
+.client-list-pane {
+    width: 350px;
+    background: rgba(255,255,255,0.05);
+    border-right: 1px solid var(--border-color);
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    white-space: nowrap;
-  }
-  .tab-btn.active { color: #fff; border-bottom-color: var(--accent-primary); background: rgba(255, 93, 0, 0.05); }
+    flex-direction: column;
+    z-index: 40;
+    flex-shrink: 0;
+}
 
-  .data-table-wrapper { width: 100%; overflow-x: auto; flex: 1; }
-  .data-table { width: 100%; border-collapse: collapse; text-align: left; }
-  .data-table th { 
-    background: #000; 
-    padding: 1rem 1.5rem; 
-    font-size: 0.7rem; 
-    text-transform: uppercase; 
-    color: var(--text-secondary); 
+.list-header {
+    padding: 20px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(15px);
     border-bottom: 1px solid var(--border-color);
-    white-space: nowrap;
     position: sticky;
     top: 0;
     z-index: 10;
-  }
-  .data-table td { 
-    padding: 1rem 1.5rem; 
-    border-bottom: 1px solid rgba(255,255,255,0.05); 
-    font-size: 0.85rem; 
-    color: #cbd5e1; 
-    vertical-align: top;
-  }
-  .data-table tr:hover { background: rgba(255,255,255,0.02); }
-  
-  .change-detail { display: block; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem; word-break: break-word; }
+}
 
-  /* DORMANCY SECTION & PROGRESS */
-  .progress-container {
+.search-input {
     width: 100%;
-    height: 6px;
-    background: rgba(255,255,255,0.1);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-top: 1rem;
-  }
-  .progress-bar {
-    height: 100%;
-    background: var(--accent-primary);
-    transition: width 0.3s ease;
-  }
-  
-  /* HEALTH STATUS BADGE */
-  .status-symbol {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-weight: 700;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 1rem;
-  }
-  .status-healthy { background: rgba(74, 222, 128, 0.1); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.2); }
-  .status-risk { background: rgba(255, 93, 0, 0.1); color: #ff5d00; border: 1px solid rgba(255, 93, 0, 0.2); }
+    padding: 10px 12px 10px 36px;
+    border-radius: 10px;
+    background: var(--bg-tertiary);
+    border: none;
+    color: var(--text-primary);
+    font-size: 14px;
+}
 
-  /* FILTER CHIP */
-  .filter-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.25rem 0.75rem;
-    background: rgba(255, 93, 0, 0.1);
-    border: 1px solid rgba(255, 93, 0, 0.3);
-    border-radius: 9999px;
-    color: #ff5d00;
-    font-size: 0.75rem;
-    font-weight: 700;
-    cursor: pointer;
-    margin-left: 1rem;
-  }
-  .filter-chip:hover {
-    background: rgba(255, 93, 0, 0.2);
-  }
-
-  .risk-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.6rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    border: 1px solid rgba(255, 93, 0, 0.35);
-    background: rgba(255, 93, 0, 0.12);
-    color: #ff8c42;
-  }
-  .risk-tag.at-risk {
-    border-color: rgba(248, 113, 113, 0.4);
-    background: rgba(248, 113, 113, 0.15);
-    color: #f87171;
-  }
-  
-  .btn-outline {
-    background: transparent;
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .btn-outline:hover { border-color: #fff; color: #fff; }
-  .btn-outline.active { background: rgba(255, 93, 0, 0.1); border-color: var(--accent-primary); color: var(--accent-primary); }
-
-  /* RISK FILTER DROPDOWN */
-  .risk-filter {
-    position: relative;
-  }
-  .risk-filter-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.6rem;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    padding: 0.5rem 0.9rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-  .risk-filter-trigger:hover {
-    border-color: rgba(255, 255, 255, 0.5);
-    color: #fff;
-  }
-  .risk-filter-trigger.active {
-    border-color: rgba(255, 93, 0, 0.6);
-    box-shadow: 0 0 0 1px rgba(255, 93, 0, 0.2), 0 8px 20px rgba(255, 93, 0, 0.18);
-    color: #fff;
-  }
-  .risk-filter-pill {
-    background: rgba(255, 93, 0, 0.15);
-    border: 1px solid rgba(255, 93, 0, 0.3);
-    color: var(--accent-primary);
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.6rem;
-    font-weight: 800;
-  }
-  .risk-filter-menu {
-    position: absolute;
-    top: calc(100% + 0.75rem);
-    right: 0;
-    min-width: 220px;
-    background: rgba(15, 23, 42, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 1rem;
-    padding: 1rem;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(18px);
-    z-index: 50;
-  }
-  .risk-filter-title {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-secondary);
-    margin-bottom: 0.75rem;
-    font-weight: 700;
-  }
-  .risk-filter-option {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.6rem 0.75rem;
-    border-radius: 0.75rem;
+.client-card {
+    padding: 16px;
+    margin: 10px 16px;
+    background: var(--bg-secondary);
+    border-radius: 16px;
     border: 1px solid transparent;
-    background: rgba(2, 6, 23, 0.6);
-    cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: #e2e8f0;
-  }
-  .risk-filter-option:hover {
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-  .risk-filter-option.selected {
-    border-color: rgba(255, 93, 0, 0.5);
-    background: rgba(255, 93, 0, 0.08);
-    color: #fff;
-  }
-  .risk-filter-option input {
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    background: rgba(0, 0, 0, 0.4);
+    cursor: pointer;
     position: relative;
-    cursor: pointer;
-  }
-  .risk-filter-option input:checked {
-    background: var(--accent-primary);
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 12px rgba(255, 93, 0, 0.5);
-  }
-  .risk-filter-option input:checked::after {
-    content: '';
-    position: absolute;
-    top: 3px;
-    left: 5px;
-    width: 5px;
-    height: 9px;
-    border: 2px solid #fff;
-    border-top: 0;
-    border-left: 0;
-    transform: rotate(45deg);
-  }
-  .risk-filter-actions {
-    margin-top: 0.9rem;
-    display: flex;
-    justify-content: flex-end;
-  }
-  .risk-filter-apply {
-    background: var(--accent-primary);
-    border: none;
-    color: #fff;
-    padding: 0.55rem 1rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-  }
-  .risk-filter-apply:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    box-shadow: none;
-    transform: none;
-  }
-  .risk-filter-apply:not(:disabled):hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 20px rgba(255, 93, 0, 0.3);
-  }
+}
 
-  /* DATE PICKER & MODAL */
-  .date-picker { display: flex; gap: 0.5rem; flex-wrap: wrap; background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 0.75rem; border: 1px solid var(--border-color); }
-  .date-btn {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.75rem;
+.client-card:hover {
+    box-shadow: var(--shadow-sm);
+    transform: scale(1.01);
+}
+
+.client-card.selected {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 1px var(--accent-blue);
+}
+
+.status-badge {
+    font-size: 10px;
     font-weight: 700;
-    cursor: pointer;
     text-transform: uppercase;
-  }
-  .date-btn.active { background: var(--accent-primary); color: white; }
+    padding: 4px 8px;
+    border-radius: 12px;
+    display: inline-block;
+}
 
-  .modal-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(12px);
-    z-index: 9999;
+.status-active { background: rgba(52, 199, 89, 0.15); color: var(--accent-green); }
+.status-inactive { background: rgba(255, 59, 48, 0.15); color: var(--accent-red); }
+
+/* --- Detail View (Right Pane) --- */
+.detail-pane {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: white;
-  }
-  .custom-date-modal {
-    background: #0f172a;
-    border: 1px solid var(--border-color);
-    border-radius: 1rem;
-    padding: 2rem;
-    width: 100%;
-    max-width: 800px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  }
-  .calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 0.5rem;
-    text-align: center;
-    margin-top: 1rem;
-  }
-  .calendar-day {
-    padding: 0.5rem;
-    border-radius: 0.5rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-  }
-  .calendar-day:hover { background: rgba(255,255,255,0.1); color: #fff; }
-  
-  /* HIGHLIGHT FEATURE STYLES */
-  .calendar-day.selected-start { 
-    background: var(--accent-primary); 
-    color: #fff;
-    border-radius: 0.5rem 0 0 0.5rem;
-  }
-  .calendar-day.selected-end { 
-    background: var(--accent-primary); 
-    color: #fff;
-    border-radius: 0 0.5rem 0.5rem 0;
-  }
-  .calendar-day.selected-same {
-    background: var(--accent-primary); 
-    color: #fff;
-    border-radius: 0.5rem;
-  }
-  .calendar-day.in-range { 
-    background: rgba(255, 93, 0, 0.15); 
-    color: #fff; 
-    border-radius: 0;
-  }
+    overflow: hidden; /* Important for inner scroll */
+    background: var(--bg-primary);
+    position: relative;
+}
 
-  .calendar-header {
+.detail-scroll-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 40px;
+    padding-bottom: 100px;
+    width: 100%;
+}
+
+.detail-content {
+    width: 100%;
+    margin: 0 auto;
+}
+
+.detail-tabs {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-  .date-select {
-    background: rgba(0,0,0,0.5);
-    color: #fff;
+    gap: 24px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 32px;
+    position: sticky;
+    top: 0;
+    padding-top: 10px;
+    z-index: 20;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: rgba(var(--bg-primary), 0.8);
+}
+
+.tab-btn {
+    padding: 12px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    position: relative;
+    transition: color 0.2s;
+}
+
+.tab-btn:hover { color: var(--text-primary); }
+
+.tab-btn.active {
+    color: var(--text-primary);
+}
+
+.tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--text-primary);
+}
+
+/* --- Metrics Grid --- */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+    width: 100%;
+}
+
+.metric-card {
+    background: var(--bg-secondary);
+    border-radius: 18px;
+    padding: 24px;
     border: 1px solid var(--border-color);
-    padding: 0.5rem;
-    border-radius: 0.5rem;
-    font-size: 0.9rem;
-  }
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 140px;
+}
+
+/* --- Table Styles --- */
+.custom-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.custom-table th {
+    text-align: left;
+    padding: 16px;
+    font-size: 13px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    background: var(--bg-secondary);
+}
+.custom-table td {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 14px;
+}
+.custom-table tr:hover td {
+    background-color: var(--bg-tertiary);
+}
+
+/* --- Responsive Media Queries --- */
+@media (max-width: 1024px) {
+    .sidebar { width: 80px; align-items: center; }
+    .sidebar-text { display: none; }
+    .nav-item { justify-content: center; }
+    .nav-icon { margin: 0; }
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .app-container { flex-direction: column; }
+    .sidebar { width: 100%; height: 60px; flex-direction: row; border-right: none; border-bottom: 1px solid var(--border-color); padding: 0 20px; }
+    .client-list-pane { width: 100%; height: 300px; }
+    .detail-scroll-container { padding: 20px; }
+}
 `;
 
-// --- 2. LOGIC HELPERS ---
-
-const formatCurrency = (amount, currency) => {
-  if (amount === undefined || amount === null) return '0.00';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(amount);
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
-
-const normalizeActorKey = (value) => (value ? value.trim().toLowerCase() : '');
-
-// --- DATA PARSING FOR CHANGE LOGS (META STYLE) ---
-const parseChangeDetails = (extraData) => {
-  if (!extraData) return <span className="text-slate-500 italic">No details available</span>;
-  try {
-    const data = JSON.parse(extraData);
-    
-    // Handle Array (common in some endpoints)
-    if (Array.isArray(data)) {
-      return data.length > 0 ? (
-        <div className="flex flex-col gap-1">
-          {data.map((item, idx) => (
-            <span key={idx} className="text-xs font-mono bg-slate-800 px-1 rounded border border-slate-700 inline-block w-fit">
-              {typeof item === 'object' ? JSON.stringify(item) : String(item)}
-            </span>
-          ))}
-        </div>
-      ) : <span className="text-slate-500 italic">No specific details</span>;
-    }
-
-    // Handle Old/New Value Format (The "Meta" Way)
-    if (data.new_value !== undefined || data.old_value !== undefined) {
-      return (
-        <div className="flex flex-col gap-1.5 text-xs bg-slate-900/50 p-2 rounded border border-slate-800">
-          {data.old_value !== undefined && data.old_value !== null && (
-            <div className="flex items-start gap-2">
-              <span className="text-rose-400 font-bold text-[10px] uppercase w-8 mt-0.5">WAS</span>
-              <span className="font-mono text-slate-400 break-all">{String(data.old_value)}</span>
-            </div>
-          )}
-          {data.new_value !== undefined && (
-            <div className="flex items-start gap-2">
-              <span className="text-emerald-400 font-bold text-[10px] uppercase w-8 mt-0.5">NOW</span>
-              <span className="font-mono text-white break-all">{String(data.new_value)}</span>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Handle generic Key-Value pairs
-    if (typeof data === 'object' && data !== null) {
-      return (
-        <div className="flex flex-col gap-1 bg-slate-900/50 p-2 rounded border border-slate-800">
-          {Object.entries(data).map(([k, v]) => (
-            <div key={k} className="flex gap-2 text-xs">
-              <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wide mt-0.5">{k.replace(/_/g, ' ')}:</span>
-              <span className="font-mono text-slate-300 break-all">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    return <span className="text-xs font-mono text-slate-400">{String(extraData).substring(0, 100)}</span>;
-  } catch (e) {
-    return <span className="text-xs font-mono text-slate-400">{String(extraData).substring(0, 100)}</span>;
-  }
-};
-
-// Function to determine API params for range
-const getRangeParams = (range, custom) => {
-  if (range.days === 'all') return { date_preset: 'maximum' };
-  if (range.days === 'custom' && custom.start && custom.end) {
-    return {
-      time_range: JSON.stringify({
-        since: custom.start.toISOString().split('T')[0],
-        until: custom.end.toISOString().split('T')[0]
-      })
-    };
-  }
-  if (range.days === 1) return { date_preset: 'today' };
-  if (range.days === 7) return { date_preset: 'last_7d' };
-  if (range.days === 30) return { date_preset: 'last_30d' };
-  
-  // Fallback
-  return { date_preset: 'last_30d' };
-};
-
-// --- CUSTOM DATE PICKER COMPONENT ---
-const CustomDatePickerModal = ({ isOpen, onClose, onApply }) => {
-  if (!isOpen) return null;
-
-  const today = new Date();
-  const [startDate, setStartDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [endDate, setEndDate] = useState(today);
-  
-  // Year range (last 20 years)
-  const years = Array.from({ length: 21 }, (_, i) => today.getFullYear() - i);
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-  const getDaysInMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-
-  const handleApply = () => {
-    onApply(startDate, endDate);
-    onClose();
-  };
-
-  const DateInputBlock = ({ label, date, setDate }) => {
-    const isDayInRange = (dayDate) => {
-      // Create fresh date objects at midnight to avoid time conflicts
-      const s = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      const e = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-      const current = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate());
-      return current > s && current < e;
-    };
-
-    const isStart = (dayDate) => {
-      return dayDate.getDate() === startDate.getDate() && 
-             dayDate.getMonth() === startDate.getMonth() && 
-             dayDate.getFullYear() === startDate.getFullYear();
-    };
-
-    const isEnd = (dayDate) => {
-      return dayDate.getDate() === endDate.getDate() && 
-             dayDate.getMonth() === endDate.getMonth() && 
-             dayDate.getFullYear() === endDate.getFullYear();
-    };
-
-    return (
-      <div style={{ marginBottom: '2rem' }}>
-        <label className="text-small" style={{ marginBottom: '0.5rem', display: 'block' }}>{label}</label>
-        <div className="glass-panel" style={{ padding: '1rem' }}>
-          <div className="calendar-header">
-            <select 
-              className="date-select" 
-              value={date.getMonth()} 
-              onChange={e => setDate(new Date(date.getFullYear(), parseInt(e.target.value), 1))}
-            >
-              {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-            <select 
-              className="date-select" 
-              value={date.getFullYear()} 
-              onChange={e => setDate(new Date(parseInt(e.target.value), date.getMonth(), 1))}
-            >
-              {years.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-          <div className="calendar-grid">
-            {['S','M','T','W','T','F','S'].map(d => <span key={d} style={{fontSize:'0.7rem', color:'#64748b'}}>{d}</span>)}
-            {Array.from({ length: getDaysInMonth(date) }, (_, i) => {
-              const day = i + 1;
-              const currentRenderDate = new Date(date.getFullYear(), date.getMonth(), day);
-              
-              const startMatch = isStart(currentRenderDate);
-              const endMatch = isEnd(currentRenderDate);
-              const inRange = isDayInRange(currentRenderDate);
-              const sameDate = startMatch && endMatch;
-
-              let className = 'calendar-day';
-              if (sameDate) className += ' selected-same';
-              else if (startMatch) className += ' selected-start';
-              else if (endMatch) className += ' selected-end';
-              else if (inRange) className += ' in-range';
-
-              return (
-                <div 
-                  key={day} 
-                  className={className}
-                  onClick={() => setDate(new Date(date.getFullYear(), date.getMonth(), day))}
-                >
-                  {day}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="modal-overlay">
-      <div className="custom-date-modal animate-in zoom-in-95">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-          <h3>Select Date Range</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><X size={20}/></button>
-        </div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-          <DateInputBlock label="START DATE" date={startDate} setDate={setStartDate} />
-          <DateInputBlock label="END DATE" date={endDate} setDate={setEndDate} />
-        </div>
-
-        <button className="btn-primary" onClick={handleApply} style={{ marginTop: '1rem' }}>Apply Date Range</button>
-      </div>
-    </div>
-  );
-};
-
-// --- GLOBAL LOADER COMPONENT ---
-const GlobalLoader = ({ status, progress, onSkip, canSkip }) => (
-  <div className="loading-overlay">
-    <div className="animate-spin-always text-accent mb-6">
-      <Loader2 size={64} />
-    </div>
-    <h3 style={{marginBottom:'0.5rem', fontSize:'1.25rem'}}>{status || 'Processing...'}</h3>
-    {progress !== undefined && progress > 0 && (
-      <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.875rem', width: '300px' }}>
-          <span>System Operation</span>
-          <span className="text-mono">{progress}%</span>
-        </div>
-        <div className="progress-container" style={{ width: '300px' }}>
-          <div className="progress-bar" style={{ width: `${progress}%` }}></div>
-        </div>
-      </>
-    )}
-    <div style={{display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', marginTop: '2rem'}}>
-      <p className="text-small" style={{color:'#64748b'}}>Securely communicating with ad infrastructure</p>
-      {canSkip && (
-        <button 
-          onClick={onSkip}
-          className="text-small hover:bg-white/10" 
-          style={{
-            background: 'rgba(255,255,255,0.05)', 
-            border: '1px solid rgba(255,255,255,0.2)', 
-            padding: '0.75rem 1.5rem', 
-            borderRadius: '99px',
-            color: '#e2e8f0',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            transition: 'all 0.2s'
-          }}
-        >
-          <SkipForward size={14} /> Skip to Dashboard
-        </button>
-      )}
-    </div>
-  </div>
-);
-
-// --- LOGIC: SUBSTANTIVE CHANGES & HELPERS ---
-const getActionValue = (insights, actionType, valueKey = 'value') => {
-  if (!insights) return 0;
-  if (typeof insights[actionType] !== 'undefined') return insights[actionType];
-  if (valueKey === 'value' && insights.actions) {
-    const action = insights.actions.find(a => a.action_type === actionType);
-    if (action) return action.value;
-  }
-  if (valueKey === 'action_values' && insights.action_values) {
-    const action = insights.action_values.find(a => a.action_type === actionType);
-    if (action) return action.value;
-  }
-  if (valueKey === 'cost_per_action_type' && insights.cost_per_action_type) {
-    const action = insights.cost_per_action_type.find(a => a.action_type === actionType);
-    if (action) return action.value;
-  }
-  return 0;
-};
-
-const formatCallDuration = (durationSeconds = 0) => {
-  const seconds = Number(durationSeconds) || 0;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  if (minutes === 0) return `${remainingSeconds}s`;
-  return `${minutes}m ${remainingSeconds}s`;
-};
-
-const formatAircallDate = (value) => {
-  if (!value) return 'Date unavailable';
-  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Date unavailable';
-  return date.toLocaleString();
-};
-
-const CREATIVE_HIGH_SIGNAL_KEYS = [
-  'link_data',
-  'image_hash',
-  'image_url',
-  'asset_id',
-  'asset_url',
-  'video_ad',
-  'video_data',
-  'video_id',
-  'child_attachments',
-  'template_url'
-];
-
-const CREATIVE_SUPPORTING_KEYS = [
-  'message',
-  'title',
-  'link_description',
-  'call_to_action',
-  'name',
-  'caption',
-  'link',
-  'description',
-  'descriptions',
-  'type',
-  'value',
-  'values',
-  'id'
-];
-
-const HIGH_COST_THRESHOLD = 60;
-const CREATIVE_LOOKBACK_DAYS = 14;
-const HIGH_COST_ACTION_MATCHERS = [
-  'lead',
-  'purchase',
-  'acquisition',
-  'offsite_conversion.purchase',
-  'omni_purchase',
-  'website_purchase'
-];
-
-const CREATIVE_EVENT_HINTS = [
-  'creative',
-  'image',
-  'video',
-  'carousel',
-  'collection',
-  'asset',
-  'catalog',
-  'template',
-  'dynamic'
-];
-
-const extractCreativePayload = (extraData) => {
-  if (!extraData) return null;
-  if (typeof extraData === 'string') {
-    try {
-      return JSON.parse(extraData);
-    } catch (error) {
-      return extraData;
-    }
-  }
-  return extraData;
-};
-
-const hasCreativeKey = (payload, keys) => {
-  const serialized = typeof payload === 'string'
-    ? payload.toLowerCase()
-    : JSON.stringify(payload).toLowerCase();
-  return keys.some(key => serialized.includes(key));
-};
-
-const isCreativeChangeLog = (log) => {
-  const payload = extractCreativePayload(log.extra_data);
-  const metadata = `${log.event_type || ''} ${log.translated_event_type || ''} ${log.object_type || ''} ${log.object_name || ''}`.toLowerCase();
-  const hasEventHint = CREATIVE_EVENT_HINTS.some(key => metadata.includes(key));
-
-  if (!payload) return hasEventHint;
-  if (hasCreativeKey(payload, CREATIVE_HIGH_SIGNAL_KEYS)) return true;
-  return hasEventHint && hasCreativeKey(payload, CREATIVE_SUPPORTING_KEYS);
-};
-
-const isSubstantiveChange = (log) => {
-  const payload = extractCreativePayload(log.extra_data);
-  if (!payload) return false;
-
-  if (hasCreativeKey(payload, CREATIVE_HIGH_SIGNAL_KEYS)) return true;
-
-  const hintText = `${log.event_type || ''} ${log.object_type || ''} ${log.object_name || ''}`.toLowerCase();
-  const hasCreativeHint = ['creative', 'image', 'video', 'carousel', 'collection', 'asset', 'ad']
-    .some(key => hintText.includes(key));
-  return hasCreativeHint && hasCreativeKey(payload, CREATIVE_SUPPORTING_KEYS);
-};
-
-const extractCostSignals = (costData) => {
-  if (!Array.isArray(costData)) {
-    return { cpl: null, cpa: null, hasHighCost: false };
-  }
-
-  let cpl = null;
-  let cpa = null;
-
-  costData.forEach((item) => {
-    const actionType = String(item?.action_type || '').toLowerCase();
-    const value = Number(item?.value);
-    if (!Number.isFinite(value)) return;
-
-    if (HIGH_COST_ACTION_MATCHERS.some(match => actionType.includes(match))) {
-      if (actionType.includes('lead')) {
-        cpl = cpl === null ? value : Math.max(cpl, value);
-      } else {
-        cpa = cpa === null ? value : Math.max(cpa, value);
-      }
-    }
-  });
-
-  const hasHighCost = [cpl, cpa].some(cost => cost !== null && cost > HIGH_COST_THRESHOLD);
-  return { cpl, cpa, hasHighCost };
-};
-
-// --- 3. MAIN COMPONENT ---
-
-export default function App() {
-  const [session, setSession] = useState({ loggedIn: false, appId: APP_ID, token: '' });
-  
-  // Loading States
-  const [globalLoading, setGlobalLoading] = useState({ active: false, status: '', progress: 0, canSkip: false });
-  const [authError, setAuthError] = useState(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  
-  const [accounts, setAccounts] = useState([]);
-  const [selectedAccount, setSelectedAccount] = useState(null);
-  const [selectedAccountHealth, setSelectedAccountHealth] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  // Dashboard Data State
-  const [activeTab, setActiveTab] = useState('overview');
-  const [dateRange, setDateRange] = useState({ label: '7 Days', days: 7 });
-  const [customDates, setCustomDates] = useState({ start: null, end: null });
-  const [showDatePicker, setShowDatePicker] = useState(false);
-
-  const [insights, setInsights] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [mainActorId, setMainActorId] = useState(null);
-  const [userActivityCounts, setUserActivityCounts] = useState({});
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [teamByAccount, setTeamByAccount] = useState({});
-  const [teamLoading, setTeamLoading] = useState(false);
-  const [aircallActivity, setAircallActivity] = useState([]);
-  const [aircallLoading, setAircallLoading] = useState(false);
-  const [aircallError, setAircallError] = useState('');
-  const [aircallPage, setAircallPage] = useState(1);
-  const [aircallHasMore, setAircallHasMore] = useState(true);
-  const [aircallHasRequested, setAircallHasRequested] = useState(false);
-
-  const [accountStatusFilter, setAccountStatusFilter] = useState('Active'); 
-  const [riskResults, setRiskResults] = useState({});
-  const [riskScan, setRiskScan] = useState({ active: false, completed: 0, total: 0, lastRun: null });
-  const [riskFilter, setRiskFilter] = useState({ highCost: false, creativeChange: false });
-  const [riskFilterDraft, setRiskFilterDraft] = useState({ highCost: false, creativeChange: false });
-  const [riskFilterOpen, setRiskFilterOpen] = useState(false);
-
-  // --- API CALLER ---
-  const callGraphAPI = useCallback(async (endpoint, params = {}) => {
-    const queryParams = new URLSearchParams({ access_token: session.token, ...params });
-    try {
-      const response = await fetch(`${BASE_URL}${endpoint}?${queryParams.toString()}`);
-      const data = await response.json();
-      if (data.error) throw data.error;
-      return data;
-    } catch (err) {
-      console.error("API Error:", err);
-      throw err;
-    }
-  }, [session.token]);
-
-  const getClientMobileNumber = useCallback((account) => {
-    if (!account) return '';
-    return (
-      account.mobileNumber ||
-      account.mobile_number ||
-      CLIENT_CONTACTS[account.account_id]?.mobileNumber ||
-      CLIENT_CONTACTS[account.id]?.mobileNumber ||
-      ''
-    );
-  }, []);
-
-  const callAircallAPI = useCallback(async (endpoint, params = {}) => {
-    if (!AIRCALL_API_ID || !AIRCALL_API_TOKEN) {
-      throw new Error('Aircall API credentials are missing.');
-    }
-    const queryParams = new URLSearchParams(params);
-    const authToken = btoa(`${AIRCALL_API_ID}:${AIRCALL_API_TOKEN}`);
-    const response = await fetch(`${AIRCALL_BASE_URL}${endpoint}?${queryParams.toString()}`, {
-      headers: {
-        Authorization: `Basic ${authToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    const data = await response.json();
-    if (!response.ok || data?.error) {
-      throw new Error(data?.error?.message || 'Failed to load Aircall activity.');
-    }
-    return data;
-  }, []);
-
-  const fetchAircallActivity = useCallback(async ({ page = 1, append = false } = {}) => {
-    if (!selectedAccount) return;
-    const mobileNumber = getClientMobileNumber(selectedAccount);
-    if (!mobileNumber) {
-      setAircallError('No mobile number is available for this client.');
-      setAircallHasRequested(true);
-      return;
-    }
-
-    setAircallLoading(true);
-    setAircallError('');
-    setAircallHasRequested(true);
-
-    try {
-      const response = await callAircallAPI('/calls', {
-        per_page: 5,
-        page,
-        phone_number: mobileNumber
-      });
-      const callData = response?.calls || response?.data || [];
-      const hasMore = Boolean(response?.meta?.next_page_link) || callData.length === 5;
-
-      setAircallActivity(prev => (append ? [...prev, ...callData] : callData));
-      setAircallPage(page);
-      setAircallHasMore(hasMore);
-    } catch (error) {
-      setAircallError(error.message || 'Unable to reach Aircall.');
-    } finally {
-      setAircallLoading(false);
-    }
-  }, [callAircallAPI, getClientMobileNumber, selectedAccount]);
-
-  const fetchChangeHistory = useCallback(async (accountId, params = {}) => {
-    const activityLog = [];
-    let afterCursor = null;
-    let hasNextPage = true;
-
-    while (hasNextPage) {
-      const pageParams = { ...params, limit: 500 };
-      if (afterCursor) pageParams.after = afterCursor;
-
-      const page = await callGraphAPI(`/${accountId}/activities`, pageParams);
-      const pageData = page?.data || [];
-      activityLog.push(...pageData);
-
-      afterCursor = page?.paging?.cursors?.after || null;
-      hasNextPage = Boolean(afterCursor) && pageData.length > 0;
-    }
-
-    return activityLog;
-  }, [callGraphAPI]);
-
-  const fetchAccountTeam = useCallback(async (accountId) => {
-    if (!accountId) return [];
-    setTeamLoading(true);
-
-    try {
-      const past = new Date();
-      past.setFullYear(past.getFullYear() - 20);
-      const activitiesSince = Math.floor(past.getTime() / 1000);
-      const historyParams = {
-        fields: 'actor_name,actor_id',
-        since: activitiesSince,
-        limit: 500
-      };
-      const activityLog = await fetchChangeHistory(accountId, historyParams);
-      const uniqueMembers = new Map();
-      activityLog.forEach((log, index) => {
-        const member = normalizeHistoryTeamMember(log, index);
-        const key = member.id || normalizeActorKey(member.activityKey);
-        if (!uniqueMembers.has(key)) {
-          uniqueMembers.set(key, member);
-        }
-      });
-      const members = Array.from(uniqueMembers.values());
-      setTeamByAccount(prev => ({ ...prev, [accountId]: members }));
-      return members;
-    } catch (err) {
-      console.error('Failed to load team roster', err);
-      setTeamByAccount(prev => ({ ...prev, [accountId]: prev[accountId] || [] }));
-      return [];
-    } finally {
-      setTeamLoading(false);
-    }
-  }, [fetchChangeHistory]);
-
-  // --- LOGIN LOGIC ---
-  const handleConnect = async (e) => {
-    e.preventDefault();
-    setAuthError(null);
-    setIsConnecting(true);
-
-    try {
-      const response = await fetch(`${BASE_URL}/me/adaccounts?fields=account_id,name,account_status,currency,amount_spent,balance&limit=200&access_token=${session.token}`);
-      const data = await response.json();
-      if (data.error) throw data.error;
-      
-      const accountList = (data.data || []).map(account => {
-        const contact = CLIENT_CONTACTS[account.account_id] || {};
-        return {
-          ...account,
-          mobileNumber: account.mobileNumber || account.mobile_number || contact.mobileNumber || ''
-        };
-      });
-      accountList.sort((a, b) => {
-        if (a.account_status === 1 && b.account_status !== 1) return -1;
-        if (a.account_status !== 1 && b.account_status === 1) return 1;
-        return a.name.localeCompare(b.name);
-      });
-      
-      setAccounts(accountList);
-      setSession(prev => ({ ...prev, loggedIn: true }));
-
-    } catch (err) {
-      setAuthError(err.message || "Connection failed. Please check your Token.");
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  const handleExportAll = async () => {
-    if (!accounts.length || isExporting) return;
-    setIsExporting(true);
-    setGlobalLoading({ active: true, status: 'Preparing export...', progress: 0, canSkip: false });
-
-    try {
-      const exportPayload = {
-        exportedAt: new Date().toISOString(),
-        totalClients: accounts.length,
-        filters: {
-          accountStatus: accountStatusFilter,
-          searchTerm
-        },
-        dateRange,
-        customDates,
-        clients: accounts.map((acc) => {
-          const accountId = `act_${acc.account_id}`;
-          return {
-            account: acc,
-            teamRoster: teamByAccount[accountId] || []
-          };
-        })
-      };
-
-      setGlobalLoading({ active: true, status: 'Finalizing export...', progress: 100, canSkip: false });
-
-      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `purge-digital-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-    } finally {
-      setGlobalLoading({ active: false, status: '', progress: 0, canSkip: false });
-      setIsExporting(false);
-    }
-  };
-
-  // Skip Handler
-  const handleSkipLoading = () => {
-    setGlobalLoading(prev => ({ ...prev, active: false }));
-    // backgroundScan state remains active and updated by performRiskScan loop
-  };
-
-  const performRiskScan = useCallback(async () => {
-    if (!accounts.length || riskScan.active) return;
-
-    const total = accounts.length;
-    const sinceDate = new Date();
-    sinceDate.setDate(sinceDate.getDate() - CREATIVE_LOOKBACK_DAYS);
-    const sinceTimestamp = Math.floor(sinceDate.getTime() / 1000);
-
-    setRiskScan({ active: true, completed: 0, total, lastRun: null });
-    setGlobalLoading({
-      active: true,
-      status: 'Scanning change history & CPL/CPA signals...',
-      progress: 0,
-      canSkip: true
-    });
-
-    const scanResults = {};
-    const insightsParams = getRangeParams(dateRange, customDates);
-    insightsParams.fields = 'cost_per_action_type';
-    insightsParams.level = 'account';
-
-    for (let index = 0; index < accounts.length; index += 1) {
-      const account = accounts[index];
-      const accountId = `act_${account.account_id}`;
-      try {
-        const [insightsResult, historyResult] = await Promise.allSettled([
-          callGraphAPI(`/${accountId}/insights`, insightsParams),
-          fetchChangeHistory(accountId, {
-            fields: 'event_time,event_type,translated_event_type,object_type,object_name,extra_data',
-            since: sinceTimestamp,
-            limit: 500
-          })
-        ]);
-
-        const insightsData = insightsResult.status === 'fulfilled' ? insightsResult.value.data?.[0] : null;
-        const costSignals = extractCostSignals(insightsData?.cost_per_action_type);
-
-        const historyLogs = historyResult.status === 'fulfilled' ? historyResult.value : [];
-        const recentCreativeChange = historyLogs.find(log => {
-          if (!log?.event_time) return false;
-          if (new Date(log.event_time) < sinceDate) return false;
-          return isCreativeChangeLog(log);
-        });
-
-        scanResults[account.account_id] = {
-          cpl: costSignals.cpl,
-          cpa: costSignals.cpa,
-          highCost: costSignals.hasHighCost,
-          recentCreativeChange: Boolean(recentCreativeChange),
-          lastCreativeChange: recentCreativeChange?.event_time || null
-        };
-      } catch (error) {
-        scanResults[account.account_id] = {
-          cpl: null,
-          cpa: null,
-          highCost: false,
-          recentCreativeChange: false,
-          lastCreativeChange: null,
-          error: error?.message || 'Scan failed'
-        };
-      } finally {
-        const completed = index + 1;
-        const progress = Math.round((completed / total) * 100);
-        setRiskScan(prev => ({ ...prev, completed }));
-        setGlobalLoading(prev => (prev.active ? {
-          ...prev,
-          status: `Scanning ${account.name} (${completed}/${total})`,
-          progress
-        } : prev));
-      }
-    }
-
-    setRiskResults(scanResults);
-    setRiskScan({ active: false, completed: total, total, lastRun: new Date() });
-    setGlobalLoading({ active: false, status: '', progress: 0, canSkip: false });
-  }, [accounts, callGraphAPI, customDates, dateRange, fetchChangeHistory, riskScan.active]);
-
-  // --- DATA SYNC LOGIC (SINGLE ACCOUNT) ---
-  const refreshAccountData = useCallback(async () => {
-    if (!selectedAccount) return;
-    
-    // IMMERSIVE LOADER TRIGGER (Cannot Skip individual loads)
-    setGlobalLoading({ active: true, status: `Loading Data for ${selectedAccount.name}...`, progress: 0, canSkip: false });
-    
-    // Reset Data
-    setSelectedAccountHealth(null); 
-    setMainActorId(null);
-    setUserActivityCounts({});
-    setLogs([]); // Clear logs
-    setHistoryLoading(true);
-
-    const insightsParams = getRangeParams(dateRange, customDates);
-    insightsParams.fields = 'spend,impressions,cpm,inline_link_clicks,inline_link_click_ctr,cost_per_inline_link_click,actions,action_values,cost_per_action_type,purchase_roas';
-    insightsParams.level = 'account';
-
-    const healthCutoff = new Date();
-    healthCutoff.setDate(healthCutoff.getDate() - 30);
-
-    // Shared variable for activity counts across async blocks
-    let currentCounts = {};
-
-    try {
-      // Determine time range for logs
-      let activitiesSince = null;
-      let activitiesUntil = null;
-      if (dateRange.days === 'all') {
-         const past = new Date(); past.setFullYear(past.getFullYear() - 20);
-         activitiesSince = Math.floor(past.getTime() / 1000);
-      } else if (dateRange.days === 'custom' && customDates.start && customDates.end) {
-         activitiesSince = Math.floor(customDates.start.getTime() / 1000);
-         activitiesUntil = Math.floor(customDates.end.getTime() / 1000);
-      } else {
-         const start = new Date();
-         start.setDate(start.getDate() - (typeof dateRange.days === 'number' ? dateRange.days : 7));
-         activitiesSince = Math.floor(start.getTime() / 1000);
-      }
-
-      // 1. FILTERED LOGS (FOR TABLE & COUNTS) - REQUEST ALL VARIABLES
-      const logsParams = {
-        fields: 'event_time,event_type,translated_event_type,actor_name,actor_id,object_name,object_id,object_type,object_link,extra_data,application_name',
-        limit: 500 // MAXIMUM PAGE SIZE PER REQUEST
-      };
-      if (activitiesSince) logsParams.since = activitiesSince;
-      if (activitiesUntil) logsParams.until = activitiesUntil;
-
-      const results = await Promise.allSettled([
-        callGraphAPI(`/${selectedAccount.id}/insights`, insightsParams), // 0
-        fetchChangeHistory(selectedAccount.id, logsParams), // 1: Filtered Logs (for table & counts)
-        callGraphAPI(`/${selectedAccount.id}/activities`, { fields: 'event_time,event_type', limit: 50 }) // 2: Health
-      ]);
-
-      // 0. INSIGHTS
-      if (results[0].status === 'fulfilled') setInsights(results[0].value.data?.[0] || null);
-      else setInsights(null);
-
-      // 1. FILTERED LOGS & COUNTS
-      let filteredActivities = [];
-      if (results[1].status === 'fulfilled') {
-        filteredActivities = results[1].value || [];
-        setLogs(filteredActivities);
-        
-        // Populate local variable immediately
-        filteredActivities.forEach(log => {
-          if (log.actor_name) {
-            const actorKey = normalizeActorKey(log.actor_name);
-            if (actorKey) {
-              currentCounts[actorKey] = (currentCounts[actorKey] || 0) + 1;
+// --- Mock Logic Services ---
+
+const generateMockMeta = (accountId) => ({
+    impressions: Math.floor(Math.random() * 50000) + 1000,
+    spend: (Math.random() * 2000).toFixed(2),
+    clicks: Math.floor(Math.random() * 1500) + 50,
+    ctr: (Math.random() * 3 + 0.5).toFixed(2),
+    campaigns: [
+        { name: "Retargeting - Q1", status: "Active", spend: 450.20, results: 45 },
+        { name: "Cold Traffic - Broad", status: "Active", spend: 1200.50, results: 120 },
+        { name: "Story Ads", status: "Paused", spend: 100.00, results: 5 },
+    ],
+});
+
+const generateMockGoogle = (accountId) => ({
+    impressions: Math.floor(Math.random() * 80000) + 5000,
+    cost: (Math.random() * 3000).toFixed(2),
+    conversions: Math.floor(Math.random() * 300) + 10,
+    costPerConv: (Math.random() * 50 + 10).toFixed(2),
+    campaigns: [
+        { name: "Search - Brand", status: "Enabled", type: "Search", cost: 500.00 },
+        { name: "PMax - All Products", status: "Enabled", type: "Performance Max", cost: 1500.00 },
+    ],
+});
+
+const generateMockStripe = (customerId) => ({
+    mrr: (Math.random() * 5000 + 1000).toFixed(2),
+    status: "Active",
+    nextBillingDate: "2023-11-01",
+    invoices: [
+        { id: "inv_123", amount: 1500.00, status: "Paid", date: "2023-10-01" },
+        { id: "inv_122", amount: 1500.00, status: "Paid", date: "2023-09-01" },
+    ]
+});
+
+// --- Components ---
+
+const ImportView = ({ onImport }) => {
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const json = JSON.parse(event.target.result);
+                const clients = json.clients || json;
+                onImport(clients);
+            } catch (error) {
+                alert("Invalid JSON file");
             }
-          }
-        });
-        // Update React State
-        setUserActivityCounts(currentCounts);
-      } else {
-        setLogs([]);
-      }
+        };
+        reader.readAsText(file);
+    };
 
-      // 2. ACTIVITY LEADER
-      let maxCount = 0;
-      let topUserKey = null;
-      Object.entries(currentCounts).forEach(([key, count]) => {
-        if (count > maxCount) {
-          maxCount = count;
-          topUserKey = key;
-        }
-      });
-      const roster = teamByAccount[selectedAccount.id] || [];
-      const topMember = roster.find(member => normalizeActorKey(member.activityKey || member.name) === topUserKey);
-      const fallbackMemberId = roster[0]?.id || null;
-      setMainActorId(topMember?.id || fallbackMemberId);
-
-      // 3. HEALTH CHECK
-      if (results[2].status === 'fulfilled') {
-        const healthActivities = results[2].value.data || [];
-        const lastHealthChange = healthActivities.find(log => isSubstantiveChange(log));
-        if (lastHealthChange && new Date(lastHealthChange.event_time) > healthCutoff) {
-          setSelectedAccountHealth({ healthy: true, lastDate: new Date(lastHealthChange.event_time).toLocaleDateString() });
-        } else {
-          setSelectedAccountHealth({ healthy: false, lastDate: lastHealthChange ? new Date(lastHealthChange.event_time).toLocaleDateString() : 'None' });
-        }
-      }
-
-    } catch (err) {
-      console.error("Critical Sync Error", err);
-    } finally {
-      // STOP LOADER
-      setHistoryLoading(false);
-      setGlobalLoading({ active: false, status: '', progress: 0, canSkip: false });
-    }
-  }, [selectedAccount, dateRange, customDates, callGraphAPI, fetchChangeHistory, teamByAccount]);
-
-  // Only trigger data refresh when Account OR Date changes (not during login)
-  useEffect(() => {
-    if (selectedAccount) refreshAccountData();
-  }, [selectedAccount, dateRange, customDates, refreshAccountData]);
-
-  useEffect(() => {
-    if (!selectedAccount) return;
-    const accountId = selectedAccount.id;
-    if (!teamByAccount[accountId]) {
-      fetchAccountTeam(accountId);
-    }
-  }, [selectedAccount, teamByAccount, fetchAccountTeam]);
-
-  useEffect(() => {
-    if (!selectedAccount) return;
-    setAircallActivity([]);
-    setAircallError('');
-    setAircallPage(1);
-    setAircallHasMore(true);
-    setAircallHasRequested(false);
-  }, [selectedAccount]);
-
-  useEffect(() => {
-    if (activeTab !== 'recent') return;
-    if (!selectedAccount) return;
-    fetchAircallActivity({ page: 1, append: false });
-  }, [activeTab, selectedAccount, fetchAircallActivity]);
-
-  useEffect(() => {
-    if (!selectedAccount) return;
-    const roster = teamByAccount[selectedAccount.id] || [];
-    if (roster.length === 0) return;
-    let maxCount = 0;
-    let topUserKey = null;
-    Object.entries(userActivityCounts).forEach(([key, count]) => {
-      if (count > maxCount) {
-        maxCount = count;
-        topUserKey = key;
-      }
-    });
-    const topMember = roster.find(member => normalizeActorKey(member.activityKey || member.name) === topUserKey);
-    const fallbackMemberId = roster[0]?.id || null;
-    setMainActorId(topMember?.id || fallbackMemberId);
-  }, [selectedAccount, teamByAccount, userActivityCounts]);
-
-  const filteredAccounts = useMemo(() => {
-    let result = accounts;
-    if (accountStatusFilter === 'Active') {
-      result = result.filter(acc => acc.account_status === 1);
-    } else if (accountStatusFilter === 'Inactive') {
-      result = result.filter(acc => acc.account_status !== 1);
-    }
-    if (searchTerm) {
-      result = result.filter(acc => acc.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    }
-    if (riskFilter.highCost || riskFilter.creativeChange) {
-      result = result.filter(acc => {
-        const riskData = riskResults[acc.account_id];
-        if (!riskData) return false;
-        const matchesHighCost = riskFilter.highCost ? riskData.highCost : true;
-        const matchesCreative = riskFilter.creativeChange ? riskData.recentCreativeChange : true;
-        return matchesHighCost && matchesCreative;
-      });
-    }
-    return result;
-  }, [accounts, searchTerm, accountStatusFilter, riskFilter, riskResults]);
-
-  const riskCounts = useMemo(() => {
-    return accounts.reduce((accum, account) => {
-      const riskData = riskResults[account.account_id];
-      if (!riskData) return accum;
-      const isRisk = riskData.highCost;
-      const isAtRisk = riskData.recentCreativeChange;
-      if (isRisk) accum.highCost += 1;
-      if (isAtRisk) accum.creativeChange += 1;
-      if (isRisk || isAtRisk) accum.total += 1;
-      return accum;
-    }, { highCost: 0, creativeChange: 0, total: 0 });
-  }, [accounts, riskResults]);
-
-  const hasRiskData = Object.keys(riskResults).length > 0;
-  const isRiskFilterActive = riskFilter.highCost || riskFilter.creativeChange;
-
-  const teamRoster = useMemo(() => {
-    if (!selectedAccount) return [];
-    return teamByAccount[selectedAccount.id] || [];
-  }, [selectedAccount, teamByAccount]);
-
-  const teamLookup = useMemo(() => {
-    return new Map(teamRoster.map(member => [member.id, member]));
-  }, [teamRoster]);
-
-  // --- RENDER: LOGIN SCREEN ---
-  if (!session.loggedIn) {
     return (
-      <div className="app-wrapper" style={{ justifyContent: 'center', alignItems: 'center' }}>
-        <style>{STYLES}</style>
-        
-        <div style={{ width: '100%', maxWidth: '480px', padding: '2rem' }}>
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <div style={{ width: '64px', height: '64px', background: 'var(--logo-bg)', borderRadius: '16px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', boxShadow: '0 10px 15px -3px rgba(255, 93, 0, 0.4)' }}>
-              <img src={LOGO_URL} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '16px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%' }} className="animate-fade-in">
+            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                <h1 style={{ fontSize: '48px', marginBottom: '10px' }}>Purge Digital</h1>
+                <p style={{ color: 'var(--text-secondary)' }}>Client Management System</p>
             </div>
-            <h1 style={{ fontSize: '2.5rem' }}>Purge Digital</h1>
-            <p className="text-small" style={{ marginTop: '1rem' }}>Agency Master Control Interface</p>
-          </div>
-
-          <div className="glass-panel content-fade-in" style={{ padding: '2rem' }}>
-             <form onSubmit={handleConnect}>
-                {authError && (
-                  <div style={{ background: 'rgba(255, 93, 0, 0.1)', border: '1px solid rgba(255, 93, 0, 0.2)', padding: '1rem', borderRadius: '0.75rem', marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', color: '#ff8c42', fontSize: '0.875rem' }}>
-                    <AlertTriangle size={16} /> {authError}
-                  </div>
-                )}
+            
+            <div className="glass-panel" style={{ padding: '60px', borderRadius: '30px', maxWidth: '500px', width: '100%', textAlign: 'center' }}>
+                <div style={{ background: 'var(--bg-tertiary)', borderRadius: '50%', width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+                    <UploadCloud size={40} color="var(--accent-blue)" />
+                </div>
+                <h2 style={{ fontSize: '24px', marginBottom: '16px' }}>Import Client Data</h2>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>Upload your JSON file to initialize the CRM.</p>
                 
-                <div className="input-group">
-                  <label className="text-small" style={{ display: 'block', marginBottom: '0.5rem' }}>System User Token</label>
-                  <div style={{ position: 'relative' }}>
-                    <Key size={18} className="input-icon" />
-                    <input type="password" required className="glass-input" placeholder="Paste Access Token" value={session.token} onChange={e => setSession({...session, token: e.target.value})} />
-                  </div>
-                </div>
-
-                <button type="submit" className="btn-primary" disabled={isConnecting} aria-busy={isConnecting}>
-                  {isConnecting ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Loader2 size={18} className="animate-spin-always" />
-                      Initializing...
-                    </span>
-                  ) : (
-                    'Initialize System'
-                  )}
-                </button>
-              </form>
-          </div>
+                <label style={{ display: 'block', cursor: 'pointer' }}>
+                    <div style={{ 
+                        height: '100px', 
+                        border: '2px dashed var(--border-color)', 
+                        borderRadius: '20px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        transition: '0.2s'
+                    }}
+                    onMouseOver={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--accent-blue)';
+                        e.currentTarget.style.backgroundColor = 'rgba(0,113,227,0.05)';
+                    }}
+                    onMouseOut={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--border-color)';
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    >
+                        <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>Select File</span>
+                    </div>
+                    <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleFileUpload} />
+                </label>
+            </div>
         </div>
-      </div>
     );
-  }
+};
 
-  // --- RENDER: DASHBOARD ---
-  return (
-    <div className="app-wrapper">
-      <style>{STYLES}</style>
+const PhoneFormatView = ({ clients, onConfirm }) => {
+    const [selected, setSelected] = useState({});
+    const [formattedClients, setFormattedClients] = useState([]);
 
-      {globalLoading.active && (
-        <GlobalLoader 
-          status={globalLoading.status} 
-          progress={globalLoading.progress} 
-          onSkip={handleSkipLoading}
-          canSkip={globalLoading.canSkip}
-        />
-      )}
-      
-      <CustomDatePickerModal 
-        isOpen={showDatePicker} 
-        onClose={() => setShowDatePicker(false)}
-        onApply={(start, end) => {
-          setCustomDates({ start, end });
-          setDateRange({ label: `Custom: ${start.toLocaleDateString()} - ${end.toLocaleDateString()}`, days: 'custom' });
-        }}
-      />
+    useEffect(() => {
+        const processed = clients.map(client => {
+            let original = client.phone || "";
+            let clean = original.replace(/[\s\-\(\)]/g, "");
+            let formatted = clean;
 
-      {/* NAV */}
-      <nav className="nav-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ width: '40px', height: '40px', background: 'var(--logo-bg)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden' }} onClick={() => setSelectedAccount(null)}>
-            <img src={LOGO_URL} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </div>
-          <div>
-            <h2 style={{ fontSize: '1rem' }}>Purge Digital</h2>
-            <span className="text-small" style={{ fontSize: '0.6rem' }}>Master Controller</span>
-          </div>
-        </div>
+            if (clean.startsWith('0')) formatted = '+61' + clean.substring(1);
+            else if (clean.startsWith('61')) formatted = '+' + clean;
+            else if (clean.length > 0 && !clean.startsWith('+')) formatted = '+61' + clean;
+
+            return { ...client, originalPhone: original, formattedPhone: formatted, needsFormat: original !== formatted };
+        });
         
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          {selectedAccount ? (
-            <button className="text-small" style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', gap: '0.5rem' }} onClick={() => setSelectedAccount(null)}>
-              <LayoutDashboard size={14} /> Back to Portfolio
-            </button>
-          ) : (
-            <div style={{display:'flex', gap:'1rem', alignItems:'center'}}>
-              {/* NEW: Status Filter Group */}
-              <div className="btn-group">
+        setFormattedClients(processed);
+        const initialSelection = {};
+        processed.forEach(c => { if (c.needsFormat) initialSelection[c.id] = true; });
+        setSelected(initialSelection);
+    }, [clients]);
+
+    const toggleSelection = (id) => setSelected(prev => ({ ...prev, [id]: !prev[id] }));
+
+    const handleSubmit = () => {
+        const finalData = formattedClients.map(c => ({
+            ...c,
+            phone: selected[c.id] ? c.formattedPhone : c.originalPhone
+        }));
+        onConfirm(finalData);
+    };
+
+    return (
+        <div style={{ padding: '40px', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }} className="animate-fade-in">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', flexShrink: 0 }}>
+                <div>
+                    <h1 style={{ fontSize: '32px' }}>Phone Formatting</h1>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Review and standardize contact numbers to +61 format.</p>
+                </div>
                 <button 
-                  className={accountStatusFilter === 'All' ? 'active' : ''} 
-                  onClick={() => setAccountStatusFilter('All')}
+                    onClick={handleSubmit} 
+                    style={{ 
+                        background: 'var(--text-primary)', 
+                        color: 'var(--bg-primary)', 
+                        padding: '12px 32px', 
+                        borderRadius: '30px', 
+                        fontWeight: 600,
+                        fontSize: '16px'
+                    }}
                 >
-                  All
+                    Confirm & Next
                 </button>
-                <button 
-                  className={accountStatusFilter === 'Active' ? 'active' : ''} 
-                  onClick={() => setAccountStatusFilter('Active')}
-                >
-                  Active
-                </button>
-                <button 
-                  className={accountStatusFilter === 'Inactive' ? 'active' : ''} 
-                  onClick={() => setAccountStatusFilter('Inactive')}
-                >
-                  Inactive
-                </button>
-              </div>
-
-              <button
-                type="button"
-                className="btn-export"
-                onClick={handleExportAll}
-                disabled={isExporting || globalLoading.active}
-              >
-                <Database size={14} />
-                {isExporting ? 'Exporting...' : 'Export'}
-              </button>
-            </div>
-          )}
-          <div style={{ width: '1px', height: '24px', background: '#334155' }}></div>
-          <LogOut size={20} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => {
-            setSession({ loggedIn: false, token: '', appId: '' });
-          }} />
-        </div>
-      </nav>
-
-      <main className="container-fluid content-fade-in">
-        
-        {/* VIEW: PORTFOLIO & FILTER CHIP */}
-        {!selectedAccount && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <div>
-                <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', marginBottom: '0.5rem' }}>Client Portfolio</h1>
-                <div style={{display:'flex', alignItems:'center'}}>
-                  <p className="text-secondary">
-                    Showing <span className="text-accent">{filteredAccounts.length}</span> of {accounts.length} assets
-                  </p>
-                  {isRiskFilterActive && (
-                    <button
-                      type="button"
-                      className="filter-chip"
-                      onClick={() => setRiskFilter({ highCost: false, creativeChange: false })}
-                    >
-                      <ShieldAlert size={12} />
-                      Risk Filter Active
-                    </button>
-                  )}
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1rem', width: '100%', maxWidth: '500px' }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={performRiskScan}
-                    disabled={riskScan.active || !accounts.length}
-                  >
-                    {riskScan.active ? 'Scanning...' : 'Run Risk Scan'}
-                  </button>
-
-                  <div className="risk-filter">
-                    <button
-                      type="button"
-                      className={`risk-filter-trigger ${riskFilterOpen ? 'active' : ''}`}
-                      onClick={() => {
-                        if (!hasRiskData) return;
-                        setRiskFilterDraft(riskFilter);
-                        setRiskFilterOpen(prev => !prev);
-                      }}
-                      disabled={!hasRiskData}
-                    >
-                      <ShieldAlert size={14} />
-                      Risk Filter
-                      {isRiskFilterActive && (
-                        <span className="risk-filter-pill">
-                          {filteredAccounts.length}
-                        </span>
-                      )}
-                    </button>
-
-                    {riskFilterOpen && (
-                      <div className="risk-filter-menu">
-                        <div className="risk-filter-title">Filter by trigger</div>
-                        <div
-                          className={`risk-filter-option ${riskFilterDraft.highCost ? 'selected' : ''}`}
-                          onClick={() => setRiskFilterDraft(prev => ({ ...prev, highCost: !prev.highCost }))}
-                        >
-                          <span>CPL/CPA over ${HIGH_COST_THRESHOLD}</span>
-                          <input type="checkbox" checked={riskFilterDraft.highCost} readOnly />
-                        </div>
-                        <div
-                          className={`risk-filter-option ${riskFilterDraft.creativeChange ? 'selected' : ''}`}
-                          onClick={() => setRiskFilterDraft(prev => ({ ...prev, creativeChange: !prev.creativeChange }))}
-                        >
-                          <span>Creative change &lt; {CREATIVE_LOOKBACK_DAYS} days</span>
-                          <input type="checkbox" checked={riskFilterDraft.creativeChange} readOnly />
-                        </div>
-                        <div className="risk-filter-actions">
-                          <button
-                            type="button"
-                            className="risk-filter-apply"
-                            onClick={() => {
-                              setRiskFilter(riskFilterDraft);
-                              setRiskFilterOpen(false);
-                            }}
-                            disabled={riskFilterDraft.highCost === riskFilter.highCost && riskFilterDraft.creativeChange === riskFilter.creativeChange}
-                          >
-                            Apply
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {(hasRiskData || riskScan.active) && (
-                  <div className="text-small" style={{ color: '#94a3b8' }}>
-                    {riskScan.active
-                      ? `Scanning ${riskScan.completed}/${riskScan.total} clients...`
-                      : `Risk scan complete · ${riskCounts.total} flagged`}
-                  </div>
-                )}
-
-                <div style={{ position: 'relative', width: '100%' }}>
-                  <Search size={18} className="input-icon" style={{ left: '1rem' }} />
-                  <input type="text" className="glass-input" placeholder="Search clients..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ borderRadius: '99px', paddingLeft: '3rem' }} />
-                </div>
-              </div>
-
             </div>
 
-            <div className="grid-portfolio">
-              {filteredAccounts.map(acc => {
-                const riskData = riskResults[acc.account_id];
-                return (
-                  <div key={acc.account_id} className="glass-panel card-content" onClick={() => setSelectedAccount({ ...acc, id: `act_${acc.account_id}` })}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-                      <div style={{ width: '48px', height: '48px', background: '#1e293b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Briefcase size={24} color="#94a3b8" />
-                      </div>
-                      <div className={`badge ${acc.account_status === 1 ? 'badge-active' : 'badge-closed'}`}>
-                        {acc.account_status === 1 ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
-                        {acc.account_status === 1 ? 'ACTIVE' : 'INACTIVE'}
-                      </div>
-                    </div>
-                    <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{acc.name}</h3>
-                    <p className="text-small text-mono">ID: {acc.account_id}</p>
-
-                    {riskData && (riskData.highCost || riskData.recentCreativeChange) && (
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-                        {riskData.highCost && (
-                          <span className="risk-tag">
-                            <BadgeDollarSign size={12} />
-                            High CPL/CPA
-                          </span>
-                        )}
-                        {riskData.recentCreativeChange && (
-                          <span className="risk-tag at-risk">
-                            <AlertTriangle size={12} />
-                            Creative change
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    
-                    <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                      <div>
-                        <p className="text-small">Lifetime Spend</p>
-                        <p style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'monospace' }}>{formatCurrency(acc.amount_spent / 100, acc.currency)}</p>
-                      </div>
-                      <ArrowUpRight size={20} color="#64748b" />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* VIEW: ACCOUNT DETAILS */}
-        {selectedAccount && (
-          <div className="animate-zoom-in" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <div>
-                <div className="text-small" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <span style={{ cursor: 'pointer' }} onClick={() => setSelectedAccount(null)}>Portfolio</span>
-                  <ChevronRight size={12} />
-                  <span className="text-accent">{selectedAccount.id}</span>
-                </div>
-                <h1 style={{ fontSize: 'clamp(2rem, 3vw, 3rem)' }}>{selectedAccount.name}</h1>
-              </div>
-              
-              {/* ADVANCED DATE PICKER (PERSISTED FROM HOME) */}
-              <div className="date-picker">
-                {[{ label: 'Today', days: 1 }, { label: '7 Days', days: 7 }, { label: '30 Days', days: 30 }, { label: 'All Time', days: 'all' }].map(d => (
-                  <button key={d.label} className={`date-btn ${dateRange.label === d.label ? 'active' : ''}`} onClick={() => setDateRange(d)}>{d.label}</button>
-                ))}
-                <button className={`date-btn ${dateRange.days === 'custom' ? 'active' : ''}`} onClick={() => setShowDatePicker(true)}>
-                  Custom
-                </button>
-              </div>
-            </div>
-
-            {/* CLIENT HEALTH STATUS BADGE */}
-            {selectedAccountHealth && (
-              <div style={{ marginBottom: '1rem' }}>
-                {selectedAccountHealth.healthy ? (
-                  <div className="status-symbol status-healthy">
-                    <CheckCircle2 size={16} /> Healthy (Activity Detected)
-                  </div>
-                ) : (
-                  <div className="status-symbol status-risk">
-                    <AlertTriangle size={16} /> Needs Optimization (No substantive changes in 30 days)
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="tab-group">
-              {['overview', 'team', 'logs', 'recent'].map(tab => (
-                <button key={tab} className={`tab-btn ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>
-                  {tab === 'overview' && <TrendingUp size={16} />}
-                  {tab === 'logs' && <History size={16} />}
-                  {tab === 'team' && <Users size={16} />}
-                  {tab === 'recent' && <Activity size={16} />}
-                  {tab === 'logs' ? 'CHANGE HISTORY' : tab === 'recent' ? 'RECENT ACTIVITY' : tab.toUpperCase()}
-                </button>
-              ))}
-            </div>
-
-            {/* TAB: OVERVIEW */}
-            {activeTab === 'overview' && (
-              <div className="grid-stats">
-                {/* 1. SPEND & IMPRESSIONS */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Total Spend</span>
-                    <TrendingUp color="#4ade80" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {formatCurrency(insights?.spend, selectedAccount.currency)}
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Impressions</span>
-                    <Activity color="#60a5fa" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {parseInt(insights?.impressions || 0).toLocaleString()}
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Avg CPM</span>
-                    <Database color="#facc15" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {formatCurrency(insights?.cpm, selectedAccount.currency)}
-                  </div>
-                </div>
-
-                {/* 2. CLICK METRICS (LINK CLICKS) */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Link Clicks</span>
-                    <MousePointerClick color="#a78bfa" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {parseInt(getActionValue(insights, 'inline_link_clicks') || 0).toLocaleString()}
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Link CTR</span>
-                    <Percent color="#a78bfa" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {parseFloat(insights?.inline_link_click_ctr || 0).toFixed(2)}%
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">CPC (Link)</span>
-                    <BadgeDollarSign color="#a78bfa" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {formatCurrency(insights?.cost_per_inline_link_click, selectedAccount.currency)}
-                  </div>
-                </div>
-
-                {/* 3. CONVERSION METRICS (LEADS & SALES) */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Total Leads</span>
-                    <Users color="#f472b6" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {parseInt(getActionValue(insights, 'lead', 'value') || 0).toLocaleString()}
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Cost Per Lead</span>
-                    <BadgeDollarSign color="#f472b6" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {formatCurrency(getActionValue(insights, 'lead', 'cost_per_action_type'), selectedAccount.currency)}
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Purchases (Sales)</span>
-                    <ShoppingBag color="#34d399" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {parseInt(getActionValue(insights, 'purchase', 'value') || getActionValue(insights, 'offsite_conversion.fb_pixel_purchase', 'value') || 0).toLocaleString()}
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Cost Per Purchase</span>
-                    <BadgeDollarSign color="#34d399" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {formatCurrency(getActionValue(insights, 'purchase', 'cost_per_action_type') || getActionValue(insights, 'offsite_conversion.fb_pixel_purchase', 'cost_per_action_type'), selectedAccount.currency)}
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">Total Conversion Value</span>
-                    <TrendingUp color="#34d399" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {formatCurrency(getActionValue(insights, 'purchase', 'action_values') || getActionValue(insights, 'offsite_conversion.fb_pixel_purchase', 'action_values'), selectedAccount.currency)}
-                  </div>
-                </div>
-
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span className="text-small">ROAS</span>
-                    <Percent color="#34d399" />
-                  </div>
-                  <div style={{ fontSize: 'clamp(1.5rem, 2vw, 2.5rem)', fontWeight: 900, fontFamily: 'monospace' }}>
-                    {getActionValue(insights, 'purchase_roas', 'value') ? parseFloat(getActionValue(insights, 'purchase_roas', 'value')).toFixed(2) : '0.00'}x
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {/* TAB: LOGS (ENHANCED CHANGE HISTORY) */}
-            {activeTab === 'logs' && (
-              <div className="glass-panel" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1, minHeight: '60vh' }}>
-                <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between' }}>
-                  <h3>Change History Log</h3>
-                  {historyLoading && <RefreshCw className="animate-spin" size={16} />}
-                </div>
-                <div className="data-table-wrapper" style={{flex: 1}}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{width: '150px'}}>Time</th>
-                        <th style={{width: '200px'}}>User</th>
-                        <th style={{width: '100px'}}>Action</th>
-                        <th style={{width: '250px'}}>Entity (Object)</th>
-                        <th>Change Details</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {logs.map((log, i) => {
-                        const matchedMember = log.actor_id ? teamLookup.get(log.actor_id) : null;
-                        const nameMatchedMember = !matchedMember && log.actor_name
-                          ? teamRoster.find(member => normalizeActorKey(member.activityKey || member.name) === normalizeActorKey(log.actor_name))
-                          : null;
-                        const displayMember = matchedMember || nameMatchedMember;
-                        return (
-                        <tr key={i}>
-                          <td className="text-mono" style={{ color: '#64748b', whiteSpace: 'nowrap' }}>
-                            <div className="flex flex-col">
-                              <span className="text-slate-300 font-bold">{new Date(log.event_time).toLocaleDateString()}</span>
-                              <span className="text-xs opacity-70">{new Date(log.event_time).toLocaleTimeString()}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
-                                {log.actor_name ? log.actor_name[0] : '?'}
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span style={{ fontWeight: 600, color: '#fff' }}>{log.actor_name || 'System'}</span>
-                                {displayMember?.email && (
-                                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                                    {displayMember.email}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`badge ${
-                              log.event_type.toLowerCase().includes('create') ? 'badge-active' :
-                              log.event_type.toLowerCase().includes('delete') ? 'badge-closed' :
-                              'badge-paused'
-                            }`} style={{ display: 'inline-flex' }}>
-                              {log.translated_event_type || log.event_type}
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{display:'flex', flexDirection:'column'}}>
-                              <span style={{fontWeight:600, color: '#e2e8f0'}}>{log.object_name || '-'}</span>
-                              <span className="text-mono" style={{fontSize:'0.65rem', color:'#64748b', marginTop:'2px'}}>ID: {log.object_id}</span>
-                            </div>
-                          </td>
-                          <td className="text-small" style={{textTransform:'none', fontSize: '0.8rem', paddingRight:'2rem'}}>
-                            {parseChangeDetails(log.extra_data)}
-                          </td>
-                        </tr>
-                        );
-                      })}
-                      {logs.length === 0 && (
-                        <tr>
-                          <td colSpan="5" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>
-                            <div className="flex flex-col items-center gap-2">
-                              <History size={32} strokeWidth={1.5} />
-                              <p>No changes found for this period.</p>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: RECENT ACTIVITY (AIRCALL) */}
-            {activeTab === 'recent' && (
-              <div className="glass-panel" style={{ padding: '1.5rem', minHeight: '40vh' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                  <div>
-                    <h3>Recent Activity</h3>
-                    <p className="text-small" style={{ marginTop: '0.35rem' }}>
-                      Linked mobile: <span style={{ color: '#fff' }}>{getClientMobileNumber(selectedAccount) || 'No number on file'}</span>
-                    </p>
-                    {aircallActivity.length > 0 && (
-                      <p className="text-small" style={{ marginTop: '0.35rem', textTransform: 'none' }}>
-                        Showing {aircallActivity.length} call{aircallActivity.length === 1 ? '' : 's'}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => fetchAircallActivity({ page: 1, append: false })}
-                    disabled={aircallLoading}
-                  >
-                    {aircallLoading ? 'Loading...' : 'Refresh Recent Activity'}
-                  </button>
-                </div>
-
-                {aircallError && (
-                  <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', borderRadius: '0.75rem', background: 'rgba(248, 113, 113, 0.1)', border: '1px solid rgba(248, 113, 113, 0.3)', color: '#f87171', fontSize: '0.85rem' }}>
-                    {aircallError}
-                  </div>
-                )}
-
-                {aircallActivity.length > 0 && (
-                  <div className="aircall-list">
-                    {aircallActivity.map(call => (
-                      <div key={call.id || `${call.started_at}-${call.to}-${call.from}`} className="aircall-card">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-                          <div style={{ fontWeight: 700, color: '#fff' }}>
-                            {call.direction ? call.direction.toUpperCase() : 'CALL'}
-                          </div>
-                          <div className="text-small" style={{ color: '#cbd5f5', textTransform: 'none' }}>
-                            {formatAircallDate(call.started_at)}
-                          </div>
-                        </div>
-                        <div className="aircall-meta">
-                          <div>
-                            <div className="text-small" style={{ fontSize: '0.65rem' }}>Duration</div>
-                            <div style={{ color: '#fff' }}>{formatCallDuration(call.duration)}</div>
-                          </div>
-                          <div>
-                            <div className="text-small" style={{ fontSize: '0.65rem' }}>Caller</div>
-                            <div style={{ color: '#fff' }}>{call.user?.name || call.user_name || 'Unknown'}</div>
-                          </div>
-                          <div>
-                            <div className="text-small" style={{ fontSize: '0.65rem' }}>From</div>
-                            <div style={{ color: '#fff' }}>{call.from || call.raw_digits || 'Unknown'}</div>
-                          </div>
-                          <div>
-                            <div className="text-small" style={{ fontSize: '0.65rem' }}>To</div>
-                            <div style={{ color: '#fff' }}>{call.to || 'Unknown'}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {aircallHasRequested && !aircallLoading && aircallActivity.length === 0 && !aircallError && (
-                  <div style={{ marginTop: '2rem', textAlign: 'center', color: '#94a3b8' }}>
-                    No interactions are available for this number.
-                  </div>
-                )}
-
-                {aircallActivity.length > 0 && (
-                  <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      disabled={!aircallHasMore || aircallLoading}
-                      onClick={() => fetchAircallActivity({ page: aircallPage + 1, append: true })}
-                    >
-                      {aircallLoading ? 'Loading...' : 'Load more'}
-                    </button>
-                    {!aircallHasMore && (
-                      <div className="text-small" style={{ textAlign: 'center', color: '#94a3b8', textTransform: 'none' }}>
-                        No further interactions are available.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB: TEAM */}
-            {activeTab === 'team' && (
-              <div className="grid-stats">
-                {teamRoster.map(member => {
-                  const isMain = member.id === mainActorId || teamRoster.length === 1;
-                  const activityKey = normalizeActorKey(member.activityKey || member.name);
-                  const activityCount = userActivityCounts[activityKey] || 0;
-                  const accessLabels = member.accessLabels && member.accessLabels.length > 0
-                    ? member.accessLabels
-                    : ['Logged Actor', 'System External'];
-
-                  return (
-                    <div key={member.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center', borderColor: isMain ? 'rgba(234, 179, 8, 0.4)' : '' }}>
-                      <div style={{ width: '56px', height: '56px', background: isMain ? 'rgba(234, 179, 8, 0.2)' : '#334155', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, flexShrink: 0, color: isMain ? '#facc15' : 'white' }}>
-                        {member.name?.[0] || '?'}
-                      </div>
-                      <div style={{ overflow: 'hidden' }}>
-                        <h4 style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
-                          {member.name}
-                          {isMain && <span className="badge-main"><Star size={10} fill="currentColor" /> MAIN</span>}
-                        </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.35rem' }}>
-                          <p className="text-small text-accent">{member.role}</p>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                            {accessLabels.map(label => (
-                              <span key={`${member.id}-${label}`} className="meta-chip">{label}</span>
+            <div className="glass-panel" style={{ flex: 1, minHeight: 0, borderRadius: '24px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                    <table className="custom-table">
+                        <thead style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 10 }}>
+                            <tr>
+                                <th style={{ width: '60px', textAlign: 'center' }}>Action</th>
+                                <th>Client Name</th>
+                                <th>Original Number</th>
+                                <th>Formatted Number</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {formattedClients.map(client => (
+                                <tr key={client.id} style={{ background: client.needsFormat ? 'transparent' : 'var(--bg-tertiary)' }}>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={!!selected[client.id]} 
+                                            onChange={() => toggleSelection(client.id)}
+                                            disabled={!client.needsFormat}
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                        />
+                                    </td>
+                                    <td style={{ fontWeight: 500 }}>{client.businessName}</td>
+                                    <td style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{client.originalPhone}</td>
+                                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{client.formattedPhone}</td>
+                                    <td>
+                                        {client.needsFormat ? (
+                                            <span className="status-badge" style={{ background: 'rgba(0, 113, 227, 0.1)', color: 'var(--accent-blue)' }}>Update</span>
+                                        ) : (
+                                            <span className="status-badge status-active">Clean</span>
+                                        )}
+                                    </td>
+                                </tr>
                             ))}
-                          </div>
-                          <p className="text-small" style={{ fontSize: '0.65rem', textTransform: 'none', opacity: 0.7 }}>
-                            {member.email}
-                          </p>
-                          <p className="text-small" style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                            Activity Count: <span style={{ color: '#fff' }}>{activityCount}</span>
-                          </p>
-                        </div>
-                      </div>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AuthView = ({ onAuthSuccess }) => {
+    const [keys, setKeys] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const handleAuth = () => {
+        setLoading(true);
+        setTimeout(() => {
+            setLoading(false);
+            onAuthSuccess();
+        }, 2000);
+    };
+
+    return (
+        <div style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="animate-fade-in">
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '50px', borderRadius: '30px', position: 'relative', overflow: 'hidden' }}>
+                {loading && (
+                    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg-secondary)', zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.9 }}>
+                        <div style={{ width: '40px', height: '40px', border: '3px solid var(--border-color)', borderTopColor: 'var(--accent-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '20px' }} />
+                        <p style={{ fontWeight: 600 }}>Authenticating Google Ads MCC...</p>
+                        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
                     </div>
-                  );
-                })}
-                {teamLoading && teamRoster.length === 0 && (
-                  <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-                    <p className="text-small">Loading team roster from change history...</p>
-                  </div>
                 )}
-                {!teamLoading && teamRoster.length === 0 && (
-                  <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-                    <p className="text-small">No team members were found in the change history for this account.</p>
-                  </div>
+
+                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                    <div style={{ width: '60px', height: '60px', background: 'var(--text-primary)', color: 'var(--bg-primary)', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                        <Key size={28} />
+                    </div>
+                    <h2 style={{ fontSize: '28px', marginBottom: '10px' }}>API Configuration</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>Enter authentication keys to connect Meta, Google, and Stripe services.</p>
+                </div>
+
+                <div style={{ marginBottom: '30px' }}>
+                    <textarea 
+                        style={{ width: '100%', height: '200px', padding: '20px', borderRadius: '16px', background: 'var(--bg-tertiary)', border: 'none', resize: 'none', fontFamily: 'monospace', fontSize: '12px' }}
+                        placeholder={`{
+  "airCallId": "...",
+  "facebookToken": "...",
+  "stripeSecret": "...",
+  "googleAds": {
+    "devToken": "...",
+    "clientId": "..."
+  }
+}`}
+                        value={keys}
+                        onChange={(e) => setKeys(e.target.value)}
+                    />
+                </div>
+
+                <button 
+                    onClick={handleAuth}
+                    disabled={keys.length < 5}
+                    style={{ 
+                        width: '100%', 
+                        padding: '16px', 
+                        background: 'var(--text-primary)', 
+                        color: 'var(--bg-primary)', 
+                        border: 'none', 
+                        borderRadius: '16px', 
+                        fontSize: '16px', 
+                        fontWeight: 600,
+                        opacity: keys.length < 5 ? 0.5 : 1,
+                        cursor: keys.length < 5 ? 'not-allowed' : 'pointer'
+                    }}
+                >
+                    Authenticate & Launch
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// --- Main CRM Logic ---
+
+const CRMView = ({ clients }) => {
+    const [selectedId, setSelectedId] = useState(null);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [activeTab, setActiveTab] = useState("overview");
+    const [darkMode, setDarkMode] = useState(false);
+    const [navTab, setNavTab] = useState("clients");
+
+    const selectedClient = useMemo(() => clients.find(c => c.id === selectedId), [clients, selectedId]);
+
+    const filteredClients = useMemo(() => {
+        if (!searchTerm) return clients;
+        const lower = searchTerm.toLowerCase();
+        return clients.filter(c => 
+            (c.businessName || '').toLowerCase().includes(lower) || 
+            (c.contactName || '').toLowerCase().includes(lower) ||
+            (c.phone || '').includes(lower)
+        );
+    }, [clients, searchTerm]);
+
+    const mockData = useMemo(() => {
+        if (!selectedClient) return {};
+        return {
+            meta: selectedClient.metaAccountId ? generateMockMeta(selectedClient.metaAccountId) : null,
+            google: selectedClient['Google Ads ID'] ? generateMockGoogle(selectedClient['Google Ads ID']) : null,
+            stripe: selectedClient.stripeCustomerId ? generateMockStripe(selectedClient.stripeCustomerId) : null,
+        };
+    }, [selectedClient]);
+
+    useEffect(() => {
+        document.documentElement.className = darkMode ? 'dark-mode' : '';
+    }, [darkMode]);
+
+    return (
+        <div className="app-container">
+            {/* Sidebar */}
+            <div className="sidebar">
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '40px', paddingLeft: '10px' }}>
+                        <div style={{ width: '36px', height: '36px', background: 'var(--text-primary)', color: 'var(--bg-primary)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, marginRight: '12px' }}>P</div>
+                        <div className="sidebar-text">
+                            <h3 style={{ fontSize: '16px', lineHeight: 1 }}>Purge Digital</h3>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Client OS</span>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {[
+                            { id: 'clients', icon: Users, label: 'Clients' },
+                            { id: 'onboards', icon: Rocket, label: 'Onboarding' },
+                            { id: 'tickets', icon: Ticket, label: 'Tickets' },
+                            { id: 'messages', icon: MessageSquare, label: 'Messages' },
+                        ].map(item => (
+                            <div 
+                                key={item.id}
+                                className={`nav-item ${navTab === item.id ? 'active' : ''}`}
+                                onClick={() => setNavTab(item.id)}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                <item.icon size={20} className="nav-icon" />
+                                <span className="sidebar-text">{item.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="nav-item" onClick={() => setNavTab('admin')} style={{ cursor: 'pointer' }}>
+                        <Settings size={20} className="nav-icon" />
+                        <span className="sidebar-text">Admin</span>
+                    </div>
+                    <div className="nav-item" onClick={() => setDarkMode(!darkMode)} style={{ cursor: 'pointer' }}>
+                        {darkMode ? <Sun size={20} className="nav-icon" /> : <Moon size={20} className="nav-icon" />}
+                        <span className="sidebar-text">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                    </div>
+                    <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '16px', display: 'flex', alignItems: 'center' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #0071e3, #af52de)', marginRight: '12px' }} />
+                        <div className="sidebar-text">
+                            <p style={{ fontSize: '13px', fontWeight: 600 }}>Admin User</p>
+                            <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>View Profile</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* List Pane */}
+            <div className="client-list-pane">
+                <div className="list-header">
+                    <h2 style={{ fontSize: '20px', marginBottom: '16px' }}>Clients</h2>
+                    <div style={{ position: 'relative' }}>
+                        <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-secondary)' }} />
+                        <input 
+                            className="search-input"
+                            placeholder="Search clients, phones..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                </div>
+                <div style={{ overflowY: 'auto', flex: 1, padding: '10px 0' }}>
+                    {filteredClients.map(client => (
+                        <div 
+                            key={client.id} 
+                            className={`client-card ${selectedId === client.id ? 'selected' : ''}`}
+                            onClick={() => setSelectedId(client.id)}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                <h4 style={{ fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>{client.businessName}</h4>
+                                <span className={`status-badge ${client.status === 'Inactive' ? 'status-inactive' : 'status-active'}`}>
+                                    {client.status || 'Active'}
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                <User size={12} style={{ marginRight: '6px' }} /> {client.contactName}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                <MapPin size={12} style={{ marginRight: '6px' }} /> 
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
+                                    {client.location?.split('\n')[0] || 'Unknown'}
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                                {client.metaAccountId && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-blue)' }} />}
+                                {client['Google Ads ID'] && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-yellow)' }} />}
+                                {client.stripeCustomerId && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-purple)' }} />}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Detail Pane */}
+            <div className="detail-pane">
+                {selectedClient ? (
+                    <>
+                        <div className="detail-tabs">
+                            {['Overview', 'Billing', 'Meta Ads', 'Google Ads', 'SEO', 'Activity'].map(tab => (
+                                <button 
+                                    key={tab} 
+                                    className={`tab-btn ${activeTab === tab.toLowerCase().split(' ')[0] ? 'active' : ''}`}
+                                    onClick={() => setActiveTab(tab.toLowerCase().split(' ')[0])}
+                                >
+                                    {tab}
+                                </button>
+                            ))}
+                        </div>
+                    
+                        <div className="detail-scroll-container">
+                            <div className="detail-content animate-fade-in">
+                                {/* Header */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
+                                    <div>
+                                        <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>{selectedClient.businessName}</h1>
+                                        <div style={{ display: 'flex', gap: '20px', color: 'var(--text-secondary)' }}>
+                                            <span style={{ display: 'flex', alignItems: 'center' }}><User size={16} style={{ marginRight: '6px' }} /> {selectedClient.contactName}</span>
+                                            <span style={{ display: 'flex', alignItems: 'center' }}><Phone size={16} style={{ marginRight: '6px' }} /> {selectedClient.phone}</span>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Phone size={18} /></button>
+                                        <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MoreHorizontal size={18} /></button>
+                                    </div>
+                                </div>
+
+                                {/* Tab Content */}
+                                {activeTab === 'overview' && (
+                                    <div className="animate-slide-up" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+                                        <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px' }}>
+                                            <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center' }}><Info size={18} style={{ marginRight: '10px' }} /> Client Details</h3>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                                <div>
+                                                    <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>Contact Email</label>
+                                                    <p style={{ fontSize: '16px', marginTop: '4px', color: 'var(--accent-blue)', fontWeight: 500 }}>{selectedClient.email}</p>
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>Formatted Phone</label>
+                                                    <p style={{ fontSize: '16px', marginTop: '4px', color: 'var(--accent-blue)', fontWeight: 500 }}>{selectedClient.phone}</p>
+                                                </div>
+                                                <div style={{ gridColumn: 'span 2' }}>
+                                                    <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>Service Industry</label>
+                                                    <div style={{ marginTop: '8px', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '12px', fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                                        {selectedClient.service}
+                                                    </div>
+                                                </div>
+                                                <div style={{ gridColumn: 'span 2' }}>
+                                                    <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>Goals</label>
+                                                    <p style={{ marginTop: '4px', fontSize: '15px' }}>{selectedClient.goals}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                            <div>
+                                                <h3 style={{ marginBottom: '16px' }}>Quick Actions</h3>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '12px', fontSize: '14px' }}>
+                                                        <span style={{ color: 'var(--text-secondary)' }}>Budget</span>
+                                                        <span style={{ fontWeight: 600 }}>{selectedClient.budget}</span>
+                                                    </div>
+                                                    <div style={{ padding: '16px', background: 'rgba(255, 204, 0, 0.1)', color: '#b38f00', borderRadius: '12px', fontSize: '13px', lineHeight: 1.4 }}>
+                                                        <strong>Note:</strong> {selectedClient.notes || 'No notes available'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'meta' && (
+                                    <div className="animate-slide-up">
+                                        {!mockData.meta ? (
+                                            <div className="glass-panel" style={{ padding: '60px', borderRadius: '24px', textAlign: 'center' }}>
+                                                <Facebook size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+                                                <h3>No Meta Account Linked</h3>
+                                                <p style={{ color: 'var(--text-secondary)' }}>Add a Meta ID to view metrics.</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="metrics-grid">
+                                                    <div className="metric-card">
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                            <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(0,113,227,0.1)', color: 'var(--accent-blue)' }}><Eye size={20} /></div>
+                                                            <span style={{ fontSize: '12px', color: 'var(--accent-green)', fontWeight: 700 }}>+12%</span>
+                                                        </div>
+                                                        <div>
+                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Impressions</p>
+                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.meta.impressions.toLocaleString()}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="metric-card">
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                            <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(52,199,89,0.1)', color: 'var(--accent-green)' }}><DollarSign size={20} /></div>
+                                                        </div>
+                                                        <div>
+                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Spend</p>
+                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>${mockData.meta.spend}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="metric-card">
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                            <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(175,82,222,0.1)', color: 'var(--accent-purple)' }}><MousePointer size={20} /></div>
+                                                        </div>
+                                                        <div>
+                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Clicks</p>
+                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.meta.clicks}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="glass-panel" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+                                                    <table className="custom-table">
+                                                        <thead style={{ background: 'var(--bg-tertiary)' }}>
+                                                            <tr>
+                                                                <th>Campaign</th>
+                                                                <th>Status</th>
+                                                                <th>Spend</th>
+                                                                <th>Results</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {mockData.meta.campaigns.map((c, i) => (
+                                                                <tr key={i}>
+                                                                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                                                                    <td><span className={`status-badge ${c.status === 'Active' ? 'status-active' : 'status-inactive'}`}>{c.status}</span></td>
+                                                                    <td>${c.spend.toFixed(2)}</td>
+                                                                    <td>{c.results}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'google' && (
+                                    <div className="animate-slide-up">
+                                        {!mockData.google ? (
+                                            <div className="glass-panel" style={{ padding: '60px', borderRadius: '24px', textAlign: 'center' }}>
+                                                <Search size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+                                                <h3>No Google Ads Account Linked</h3>
+                                            </div>
+                                        ) : (
+                                            <div className="metrics-grid">
+                                                <div className="metric-card">
+                                                    <div style={{ padding: '8px', width: 'fit-content', borderRadius: '8px', background: 'rgba(255,59,48,0.1)', color: 'var(--accent-red)' }}><CreditCard size={20} /></div>
+                                                    <div>
+                                                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Cost</p>
+                                                        <p style={{ fontSize: '24px', fontWeight: 700 }}>${mockData.google.cost}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="metric-card">
+                                                    <div style={{ padding: '8px', width: 'fit-content', borderRadius: '8px', background: 'rgba(52,199,89,0.1)', color: 'var(--accent-green)' }}><CheckCircle size={20} /></div>
+                                                    <div>
+                                                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Conversions</p>
+                                                        <p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.google.conversions}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'billing' && (
+                                    <div className="animate-slide-up">
+                                        {!mockData.stripe ? (
+                                            <div className="glass-panel" style={{ padding: '60px', borderRadius: '24px', textAlign: 'center' }}>
+                                                <CreditCard size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+                                                <h3>No Billing Account Connected</h3>
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
+                                                <div className="glass-panel" style={{ padding: '30px', borderRadius: '24px', background: 'linear-gradient(135deg, #af52de, #5856d6)', color: 'white', border: 'none' }}>
+                                                    <p style={{ opacity: 0.8, fontSize: '14px', fontWeight: 500 }}>Current MRR</p>
+                                                    <p style={{ fontSize: '42px', fontWeight: 700, margin: '10px 0 30px' }}>${mockData.stripe.mrr}</p>
+                                                    <div style={{ background: 'rgba(255,255,255,0.2)', padding: '16px', borderRadius: '16px', backdropFilter: 'blur(10px)' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                                                            <span>Status</span>
+                                                            <span style={{ fontWeight: 700 }}>Active</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                            <span>Next Bill</span>
+                                                            <span style={{ fontWeight: 700 }}>{mockData.stripe.nextBillingDate}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="glass-panel" style={{ borderRadius: '24px', padding: '24px' }}>
+                                                    <h3 style={{ marginBottom: '20px' }}>Recent Invoices</h3>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                        {mockData.stripe.invoices.map((inv, i) => (
+                                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'var(--bg-tertiary)', borderRadius: '12px' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                                    <FileText size={18} style={{ marginRight: '12px', color: 'var(--text-secondary)' }} />
+                                                                    <div>
+                                                                        <p style={{ fontWeight: 600, fontSize: '14px' }}>Invoice #{inv.id}</p>
+                                                                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{inv.date}</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div style={{ textAlign: 'right' }}>
+                                                                    <p style={{ fontWeight: 700 }}>${inv.amount.toFixed(2)}</p>
+                                                                    <span style={{ fontSize: '10px', color: 'var(--accent-green)', fontWeight: 700 }}>PAID</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                {(activeTab === 'seo' || activeTab === 'activity') && (
+                                    <div className="animate-slide-up glass-panel" style={{ padding: '80px', borderRadius: '24px', textAlign: 'center' }}>
+                                        <Activity size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+                                        <h3>{activeTab.toUpperCase()} Data</h3>
+                                        <p style={{ color: 'var(--text-secondary)' }}>Live feed connecting...</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                        <Layout size={64} style={{ marginBottom: '16px', opacity: 0.2 }} />
+                        <p style={{ fontSize: '18px' }}>Select a client to view details</p>
+                    </div>
                 )}
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+            </div>
+        </div>
+    );
+};
+
+// --- App Orchestrator ---
+
+const App = () => {
+    const [step, setStep] = useState('import');
+    const [clients, setClients] = useState([]);
+
+    useEffect(() => {
+        // Inject styles
+        const styleEl = document.createElement('style');
+        styleEl.textContent = STYLES;
+        document.head.appendChild(styleEl);
+        return () => document.head.removeChild(styleEl);
+    }, []);
+
+    return (
+        <>
+            {step === 'import' && <ImportView onImport={(data) => { setClients(data); setStep('format'); }} />}
+            {step === 'format' && <PhoneFormatView clients={clients} onConfirm={(data) => { setClients(data); setStep('auth'); }} />}
+            {step === 'auth' && <AuthView onAuthSuccess={() => setStep('dashboard')} />}
+            {step === 'dashboard' && <CRMView clients={clients} />}
+        </>
+    );
+};
+
+export default App;
