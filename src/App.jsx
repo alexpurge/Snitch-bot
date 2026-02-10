@@ -356,6 +356,18 @@ const generateMockStripe = (customerId) => ({
     ]
 });
 
+const getClientServices = (client) => {
+    const services = [];
+    if (client.metaAccountId) services.push('Meta Ads');
+    if (client['Google Ads ID']) services.push('Google Ads');
+    return services;
+};
+
+const getServiceSummary = (client) => {
+    const services = getClientServices(client);
+    return services.length ? services.join(' + ') : 'No paid media service linked';
+};
+
 // --- Components ---
 
 const ImportView = ({ onImport }) => {
@@ -704,9 +716,9 @@ const CRMView = ({ clients }) => {
                                 <User size={12} style={{ marginRight: '6px' }} /> {client.contactName}
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                <MapPin size={12} style={{ marginRight: '6px' }} /> 
+                                <BarChart2 size={12} style={{ marginRight: '6px' }} /> 
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
-                                    {client.location?.split('\n')[0] || 'Unknown'}
+                                    {getServiceSummary(client)}
                                 </span>
                             </div>
                             <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
@@ -724,13 +736,27 @@ const CRMView = ({ clients }) => {
                 {selectedClient ? (
                     <>
                         <div className="detail-tabs">
-                            {['Overview', 'Billing', 'Meta Ads', 'Google Ads', 'SEO', 'Activity'].map(tab => (
+                            {[
+                                { id: 'overview', label: 'Overview', icon: Layout },
+                                { id: 'billing', label: 'Billing', icon: CreditCard },
+                                { id: 'meta', label: 'Meta Ads', icon: Facebook, idValue: selectedClient.metaAccountId },
+                                { id: 'google', label: 'Google Ads', icon: Chrome, idValue: selectedClient['Google Ads ID'] },
+                                { id: 'seo', label: 'SEO', icon: TrendingDown },
+                                { id: 'activity', label: 'Activity', icon: Activity },
+                            ].map(tab => (
                                 <button 
-                                    key={tab} 
-                                    className={`tab-btn ${activeTab === tab.toLowerCase().split(' ')[0] ? 'active' : ''}`}
-                                    onClick={() => setActiveTab(tab.toLowerCase().split(' ')[0])}
+                                    key={tab.id} 
+                                    className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                                 >
-                                    {tab}
+                                    <tab.icon size={16} />
+                                    <span>{tab.label}</span>
+                                    {tab.idValue && (
+                                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                            #{tab.idValue}
+                                        </span>
+                                    )}
                                 </button>
                             ))}
                         </div>
@@ -740,7 +766,10 @@ const CRMView = ({ clients }) => {
                                 {/* Header */}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
                                     <div>
-                                        <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>{selectedClient.businessName}</h1>
+                                        <h1 style={{ fontSize: '36px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <Layout size={30} />
+                                            {selectedClient.businessName}
+                                        </h1>
                                         <div style={{ display: 'flex', gap: '20px', color: 'var(--text-secondary)' }}>
                                             <span style={{ display: 'flex', alignItems: 'center' }}><User size={16} style={{ marginRight: '6px' }} /> {selectedClient.contactName}</span>
                                             <span style={{ display: 'flex', alignItems: 'center' }}><Phone size={16} style={{ marginRight: '6px' }} /> {selectedClient.phone}</span>
@@ -806,6 +835,9 @@ const CRMView = ({ clients }) => {
                                             </div>
                                         ) : (
                                             <>
+                                                <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
+                                                    <Facebook size={16} /> Meta Ads ID: <strong style={{ color: 'var(--text-primary)' }}>{selectedClient.metaAccountId}</strong>
+                                                </div>
                                                 <div className="metrics-grid">
                                                     <div className="metric-card">
                                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -871,22 +903,27 @@ const CRMView = ({ clients }) => {
                                                 <h3>No Google Ads Account Linked</h3>
                                             </div>
                                         ) : (
-                                            <div className="metrics-grid">
-                                                <div className="metric-card">
-                                                    <div style={{ padding: '8px', width: 'fit-content', borderRadius: '8px', background: 'rgba(255,59,48,0.1)', color: 'var(--accent-red)' }}><CreditCard size={20} /></div>
-                                                    <div>
-                                                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Cost</p>
-                                                        <p style={{ fontSize: '24px', fontWeight: 700 }}>${mockData.google.cost}</p>
+                                            <>
+                                                <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
+                                                    <Chrome size={16} /> Google Ads ID: <strong style={{ color: 'var(--text-primary)' }}>{selectedClient['Google Ads ID']}</strong>
+                                                </div>
+                                                <div className="metrics-grid">
+                                                    <div className="metric-card">
+                                                        <div style={{ padding: '8px', width: 'fit-content', borderRadius: '8px', background: 'rgba(255,59,48,0.1)', color: 'var(--accent-red)' }}><DollarSign size={20} /></div>
+                                                        <div>
+                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Cost</p>
+                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>${mockData.google.cost}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="metric-card">
+                                                        <div style={{ padding: '8px', width: 'fit-content', borderRadius: '8px', background: 'rgba(52,199,89,0.1)', color: 'var(--accent-green)' }}><CheckCircle size={20} /></div>
+                                                        <div>
+                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Conversions</p>
+                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.google.conversions}</p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div className="metric-card">
-                                                    <div style={{ padding: '8px', width: 'fit-content', borderRadius: '8px', background: 'rgba(52,199,89,0.1)', color: 'var(--accent-green)' }}><CheckCircle size={20} /></div>
-                                                    <div>
-                                                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Conversions</p>
-                                                        <p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.google.conversions}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            </>
                                         )}
                                     </div>
                                 )}
@@ -941,7 +978,11 @@ const CRMView = ({ clients }) => {
                                 
                                 {(activeTab === 'seo' || activeTab === 'activity') && (
                                     <div className="animate-slide-up glass-panel" style={{ padding: '80px', borderRadius: '24px', textAlign: 'center' }}>
-                                        <Activity size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+                                        {activeTab === 'seo' ? (
+                                            <TrendingDown size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+                                        ) : (
+                                            <Activity size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+                                        )}
                                         <h3>{activeTab.toUpperCase()} Data</h3>
                                         <p style={{ color: 'var(--text-secondary)' }}>Live feed connecting...</p>
                                     </div>
