@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-    UploadCloud, Key, Facebook, Chrome, CreditCard, Phone, User, MapPin, 
-    Info, Eye, DollarSign, MousePointer, Percent, CheckCircle, TrendingDown, 
-    Layout, FileText, Activity, BarChart2, Users, Rocket, Ticket, 
-    MessageSquare, Settings, Sun, Moon, MoreHorizontal, Search, Check
+    UploadCloud, Key, Facebook, Chrome, CreditCard, Phone, User, Building2,
+    Info, Eye, DollarSign, MousePointer, Percent, CheckCircle, Globe, 
+    LayoutDashboard, FileText, Activity, BriefcaseBusiness, Users, ClipboardList, Ticket,
+    MessageSquareText, Shield, Sun, Moon, MoreHorizontal, Search, Check
 } from 'lucide-react';
 
 /* -----------------------------------------------------------------------
@@ -649,9 +649,9 @@ const CRMView = ({ clients }) => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         {[
                             { id: 'clients', icon: Users, label: 'Clients' },
-                            { id: 'onboards', icon: Rocket, label: 'Onboarding' },
+                            { id: 'onboards', icon: ClipboardList, label: 'Onboarding' },
                             { id: 'tickets', icon: Ticket, label: 'Tickets' },
-                            { id: 'messages', icon: MessageSquare, label: 'Messages' },
+                            { id: 'messages', icon: MessageSquareText, label: 'Messages' },
                         ].map(item => (
                             <div 
                                 key={item.id}
@@ -668,12 +668,12 @@ const CRMView = ({ clients }) => {
 
                 <div>
                     <div className="nav-item" onClick={() => setNavTab('admin')} style={{ cursor: 'pointer' }}>
-                        <Settings size={20} className="nav-icon" />
+                        <Shield size={20} className="nav-icon" />
                         <span className="sidebar-text">Admin</span>
                     </div>
                     <div className="nav-item" onClick={() => setDarkMode(!darkMode)} style={{ cursor: 'pointer' }}>
-                        {darkMode ? <Sun size={20} className="nav-icon" /> : <Moon size={20} className="nav-icon" />}
-                        <span className="sidebar-text">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                        {darkMode ? <Moon size={20} className="nav-icon" /> : <Sun size={20} className="nav-icon" />}
+                        <span className="sidebar-text">{darkMode ? 'Dark Mode' : 'Light Mode'}</span>
                     </div>
                     <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '16px', display: 'flex', alignItems: 'center' }}>
                         <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #0071e3, #af52de)', marginRight: '12px' }} />
@@ -707,16 +707,16 @@ const CRMView = ({ clients }) => {
                             onClick={() => setSelectedId(client.id)}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                                <h4 style={{ fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>{client.businessName}</h4>
+                                <h4 style={{ fontSize: '15px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Building2 size={13} />
+                                    {client.businessName}
+                                </h4>
                                 <span className={`status-badge ${client.status === 'Inactive' ? 'status-inactive' : 'status-active'}`}>
                                     {client.status || 'Active'}
                                 </span>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                                <User size={12} style={{ marginRight: '6px' }} /> {client.contactName}
-                            </div>
                             <div style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                <BarChart2 size={12} style={{ marginRight: '6px' }} /> 
+                                <BriefcaseBusiness size={12} style={{ marginRight: '6px' }} /> 
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
                                     {getServiceSummary(client)}
                                 </span>
@@ -737,11 +737,11 @@ const CRMView = ({ clients }) => {
                     <>
                         <div className="detail-tabs">
                             {[
-                                { id: 'overview', label: 'Overview', icon: Layout },
+                                { id: 'overview', label: 'Overview', icon: LayoutDashboard },
                                 { id: 'billing', label: 'Billing', icon: CreditCard },
                                 { id: 'meta', label: 'Meta Ads', icon: Facebook, idValue: selectedClient.metaAccountId },
                                 { id: 'google', label: 'Google Ads', icon: Chrome, idValue: selectedClient['Google Ads ID'] },
-                                { id: 'seo', label: 'SEO', icon: TrendingDown },
+                                { id: 'seo', label: 'SEO', icon: Globe },
                                 { id: 'activity', label: 'Activity', icon: Activity },
                             ].map(tab => (
                                 <button 
@@ -767,7 +767,7 @@ const CRMView = ({ clients }) => {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
                                     <div>
                                         <h1 style={{ fontSize: '36px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <Layout size={30} />
+                                            <Building2 size={30} />
                                             {selectedClient.businessName}
                                         </h1>
                                         <div style={{ display: 'flex', gap: '20px', color: 'var(--text-secondary)' }}>
@@ -979,7 +979,7 @@ const CRMView = ({ clients }) => {
                                 {(activeTab === 'seo' || activeTab === 'activity') && (
                                     <div className="animate-slide-up glass-panel" style={{ padding: '80px', borderRadius: '24px', textAlign: 'center' }}>
                                         {activeTab === 'seo' ? (
-                                            <TrendingDown size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+                                            <Globe size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
                                         ) : (
                                             <Activity size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
                                         )}
@@ -992,7 +992,7 @@ const CRMView = ({ clients }) => {
                     </>
                 ) : (
                     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                        <Layout size={64} style={{ marginBottom: '16px', opacity: 0.2 }} />
+                        <LayoutDashboard size={64} style={{ marginBottom: '16px', opacity: 0.2 }} />
                         <p style={{ fontSize: '18px' }}>Select a client to view details</p>
                     </div>
                 )}
