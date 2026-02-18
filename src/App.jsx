@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     UploadCloud, Key, Facebook, Chrome, CreditCard, Phone, User, Building2,
     Info, Eye, DollarSign, MousePointer, Percent, CheckCircle, Globe, 
     LayoutDashboard, FileText, Activity, BriefcaseBusiness, Users, ClipboardList, Ticket,
-    MessageSquareText, Shield, Sun, Moon, MoreHorizontal, Search, Check
+    MessageSquareText, Shield, Sun, Moon , Search
 } from 'lucide-react';
 
 /* -----------------------------------------------------------------------
@@ -601,24 +601,85 @@ const AuthView = ({ onAuthSuccess }) => {
 
 // --- Main CRM Logic ---
 
+const normalizeUrl = (url) => {
+    if (!url) return null;
+    return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+};
+
+const getClientLinks = (client) => ({
+    website: normalizeUrl(client.website || client.websiteUrl || client.url),
+    facebook: normalizeUrl(client.facebook || client.facebookUrl),
+    google: normalizeUrl(client.googleBusinessUrl || client.googleUrl || client.googleMapsUrl),
+});
+
+const buildWorkItems = (client) => ({
+    onboarding: [
+        { title: 'Brand intake form completed', status: 'done' },
+        { title: 'Asset access granted (Meta/Google)', status: client.metaAccountId || client['Google Ads ID'] ? 'in_progress' : 'todo' },
+        { title: 'Tracking + analytics verification', status: 'todo' },
+        { title: 'Campaign kickoff checklist', status: 'todo' },
+    ],
+    tickets: [
+        { id: `TK-${client.id || '0'}-01`, title: 'Creative feedback requested', priority: 'High', status: 'In Progress' },
+        { id: `TK-${client.id || '0'}-02`, title: 'Landing page CTA alignment', priority: 'Medium', status: 'Todo' },
+    ],
+    messages: [
+        { from: 'agent', text: `Hi ${client.contactName || 'there'}, we have updated your account summary.` },
+        { from: 'client', text: 'Perfect, thank you. Can we review ad performance tomorrow?' },
+        { from: 'agent', text: 'Absolutely. I have added that to your queue.' },
+    ],
+});
+
+const getNavMetadata = (clients) => {
+    const withWork = clients.map(client => ({ client, work: buildWorkItems(client) }));
+    return {
+        clients,
+        onboards: withWork.filter(({ work }) => work.onboarding.some(step => step.status !== 'done')).map(({ client, work }) => ({ client, work })),
+        tickets: withWork.filter(({ work }) => work.tickets.length > 0).map(({ client, work }) => ({ client, work })),
+        messages: withWork.filter(({ work }) => work.messages.length > 0).map(({ client, work }) => ({ client, work })),
+    };
+};
+
 const CRMView = ({ clients }) => {
     const [selectedId, setSelectedId] = useState(null);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [activeTab, setActiveTab] = useState("overview");
+    const [searchTerm, setSearchTerm] = useState('');
+    const [activeTab, setActiveTab] = useState('overview');
     const [darkMode, setDarkMode] = useState(false);
-    const [navTab, setNavTab] = useState("clients");
+    const [navTab, setNavTab] = useState('clients');
 
-    const selectedClient = useMemo(() => clients.find(c => c.id === selectedId), [clients, selectedId]);
+    const navData = useMemo(() => getNavMetadata(clients), [clients]);
+
+    const selectedCollection = useMemo(() => {
+        if (navTab === 'clients') return navData.clients.map(client => ({ client, work: buildWorkItems(client) }));
+        return navData[navTab] || [];
+    }, [navTab, navData]);
 
     const filteredClients = useMemo(() => {
-        if (!searchTerm) return clients;
+        if (!searchTerm) return selectedCollection;
         const lower = searchTerm.toLowerCase();
-        return clients.filter(c => 
-            (c.businessName || '').toLowerCase().includes(lower) || 
-            (c.contactName || '').toLowerCase().includes(lower) ||
-            (c.phone || '').includes(lower)
+        return selectedCollection.filter(({ client }) =>
+            (client.businessName || '').toLowerCase().includes(lower) ||
+            (client.contactName || '').toLowerCase().includes(lower) ||
+            (client.phone || '').includes(lower)
         );
-    }, [clients, searchTerm]);
+    }, [selectedCollection, searchTerm]);
+
+    const selectedRecord = useMemo(() => filteredClients.find(({ client }) => client.id === selectedId) || selectedCollection.find(({ client }) => client.id === selectedId), [filteredClients, selectedCollection, selectedId]);
+    const selectedClient = selectedRecord?.client || null;
+
+    useEffect(() => {
+        if (filteredClients.length > 0 && !filteredClients.some(({ client }) => client.id === selectedId)) {
+            setSelectedId(filteredClients[0].client.id);
+        }
+        if (filteredClients.length === 0) {
+            setSelectedId(null);
+        }
+    }, [filteredClients, selectedId]);
+
+    useEffect(() => {
+        setActiveTab('overview');
+        setSearchTerm('');
+    }, [navTab]);
 
     const mockData = useMemo(() => {
         if (!selectedClient) return {};
@@ -629,13 +690,92 @@ const CRMView = ({ clients }) => {
         };
     }, [selectedClient]);
 
+    const links = selectedClient ? getClientLinks(selectedClient) : {};
+
     useEffect(() => {
         document.documentElement.className = darkMode ? 'dark-mode' : '';
     }, [darkMode]);
 
+    const listTitle = navTab === 'clients' ? 'Clients' : navTab === 'onboards' ? 'Onboarding' : navTab === 'tickets' ? 'Tickets' : 'Messages';
+    const searchPlaceholder = navTab === 'clients' ? 'Search clients, phones...' : `Search ${listTitle.toLowerCase()} clients...`;
+
+    const detailTabs = [
+        { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+        { id: 'billing', label: 'Billing', icon: CreditCard },
+        { id: 'meta', label: 'Meta Ads', icon: Facebook },
+        { id: 'google', label: 'Google Ads', icon: Chrome },
+        { id: 'seo', label: 'SEO', icon: Globe },
+        { id: 'activity', label: 'Activity', icon: Activity },
+        { id: 'messages', label: 'Messages', icon: MessageSquareText },
+        { id: 'tickets', label: 'Tickets', icon: Ticket },
+    ];
+
+    const renderNavSpecificContent = () => {
+        if (!selectedRecord) return null;
+        const { work } = selectedRecord;
+
+        if (navTab === 'onboards') {
+            return (
+                <div className="animate-slide-up glass-panel" style={{ borderRadius: '24px', padding: '24px' }}>
+                    <h3 style={{ marginBottom: '18px' }}>Onboarding Steps</h3>
+                    <div style={{ display: 'grid', gap: '10px' }}>
+                        {work.onboarding.map((step, idx) => {
+                            const isDone = step.status === 'done';
+                            const inProgress = step.status === 'in_progress';
+                            return (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: '12px', background: 'var(--bg-tertiary)' }}>
+                                    <p style={{ fontSize: '14px', fontWeight: 500 }}>{step.title}</p>
+                                    <span className="status-badge" style={{ background: isDone ? 'rgba(52,199,89,0.15)' : inProgress ? 'rgba(255,149,0,0.15)' : 'rgba(134,134,139,0.15)', color: isDone ? 'var(--accent-green)' : inProgress ? 'var(--accent-orange)' : 'var(--text-secondary)' }}>
+                                        {isDone ? 'Done' : inProgress ? 'In Progress' : 'Todo'}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        }
+
+        if (navTab === 'tickets' || activeTab === 'tickets') {
+            return (
+                <div className="animate-slide-up glass-panel" style={{ borderRadius: '24px', padding: '16px' }}>
+                    <h3 style={{ margin: '8px 8px 14px' }}>Tickets Board</h3>
+                    <div style={{ display: 'grid', gap: '10px' }}>
+                        {work.tickets.map((ticketItem) => (
+                            <div key={ticketItem.id} style={{ padding: '16px', borderRadius: '14px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
+                                    <strong>{ticketItem.title}</strong>
+                                    <span className="status-badge" style={{ background: 'rgba(0,113,227,0.12)', color: 'var(--accent-blue)' }}>{ticketItem.status}</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                                    <span>{ticketItem.id}</span>
+                                    <span>Priority: {ticketItem.priority}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        if (navTab === 'messages' || activeTab === 'messages') {
+            return (
+                <div className="animate-slide-up glass-panel" style={{ borderRadius: '24px', padding: '20px', display: 'grid', gap: '12px' }}>
+                    <h3 style={{ marginBottom: '8px' }}>Messages</h3>
+                    {work.messages.map((message, index) => (
+                        <div key={index} style={{ maxWidth: '70%', justifySelf: message.from === 'agent' ? 'end' : 'start', padding: '12px 14px', borderRadius: '14px', background: message.from === 'agent' ? 'var(--accent-blue)' : 'var(--bg-tertiary)', color: message.from === 'agent' ? 'white' : 'var(--text-primary)' }}>
+                            {message.text}
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        return null;
+    };
+
     return (
         <div className="app-container">
-            {/* Sidebar */}
             <div className="sidebar">
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '40px', paddingLeft: '10px' }}>
@@ -653,7 +793,7 @@ const CRMView = ({ clients }) => {
                             { id: 'tickets', icon: Ticket, label: 'Tickets' },
                             { id: 'messages', icon: MessageSquareText, label: 'Messages' },
                         ].map(item => (
-                            <div 
+                            <div
                                 key={item.id}
                                 className={`nav-item ${navTab === item.id ? 'active' : ''}`}
                                 onClick={() => setNavTab(item.id)}
@@ -675,34 +815,26 @@ const CRMView = ({ clients }) => {
                         {darkMode ? <Moon size={20} className="nav-icon" /> : <Sun size={20} className="nav-icon" />}
                         <span className="sidebar-text">{darkMode ? 'Dark Mode' : 'Light Mode'}</span>
                     </div>
-                    <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '16px', display: 'flex', alignItems: 'center' }}>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #0071e3, #af52de)', marginRight: '12px' }} />
-                        <div className="sidebar-text">
-                            <p style={{ fontSize: '13px', fontWeight: 600 }}>Admin User</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>View Profile</p>
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            {/* List Pane */}
             <div className="client-list-pane">
                 <div className="list-header">
-                    <h2 style={{ fontSize: '20px', marginBottom: '16px' }}>Clients</h2>
+                    <h2 style={{ fontSize: '20px', marginBottom: '16px' }}>{listTitle}</h2>
                     <div style={{ position: 'relative' }}>
                         <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-secondary)' }} />
-                        <input 
+                        <input
                             className="search-input"
-                            placeholder="Search clients, phones..."
+                            placeholder={searchPlaceholder}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
                 </div>
                 <div style={{ overflowY: 'auto', flex: 1, padding: '10px 0' }}>
-                    {filteredClients.map(client => (
-                        <div 
-                            key={client.id} 
+                    {filteredClients.map(({ client, work }) => (
+                        <div
+                            key={client.id}
                             className={`client-card ${selectedId === client.id ? 'selected' : ''}`}
                             onClick={() => setSelectedId(client.id)}
                         >
@@ -716,9 +848,9 @@ const CRMView = ({ clients }) => {
                                 </span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                <BriefcaseBusiness size={12} style={{ marginRight: '6px' }} /> 
+                                <BriefcaseBusiness size={12} style={{ marginRight: '6px' }} />
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
-                                    {getServiceSummary(client)}
+                                    {navTab === 'tickets' ? `${work.tickets.length} open tickets` : navTab === 'messages' ? `${work.messages.length} recent messages` : getServiceSummary(client)}
                                 </span>
                             </div>
                             <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
@@ -731,69 +863,58 @@ const CRMView = ({ clients }) => {
                 </div>
             </div>
 
-            {/* Detail Pane */}
             <div className="detail-pane">
                 {selectedClient ? (
                     <>
-                        <div className="detail-tabs">
-                            {[
-                                { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-                                { id: 'billing', label: 'Billing', icon: CreditCard },
-                                { id: 'meta', label: 'Meta Ads', icon: Facebook, idValue: selectedClient.metaAccountId },
-                                { id: 'google', label: 'Google Ads', icon: Chrome, idValue: selectedClient['Google Ads ID'] },
-                                { id: 'seo', label: 'SEO', icon: Globe },
-                                { id: 'activity', label: 'Activity', icon: Activity },
-                            ].map(tab => (
-                                <button 
-                                    key={tab.id} 
+                        <div className="detail-tabs" style={{ margin: '0 24px', paddingLeft: '8px', paddingRight: '8px', borderRadius: '14px' }}>
+                            {detailTabs.map(tab => (
+                                <button
+                                    key={tab.id}
                                     className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
                                     onClick={() => setActiveTab(tab.id)}
                                     style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                                 >
                                     <tab.icon size={16} />
                                     <span>{tab.label}</span>
-                                    {tab.idValue && (
-                                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                                            #{tab.idValue}
-                                        </span>
-                                    )}
                                 </button>
                             ))}
                         </div>
-                    
+
                         <div className="detail-scroll-container">
                             <div className="detail-content animate-fade-in">
-                                {/* Header */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '34px' }}>
                                     <div>
                                         <h1 style={{ fontSize: '36px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                                             <Building2 size={30} />
                                             {selectedClient.businessName}
                                         </h1>
-                                        <div style={{ display: 'flex', gap: '20px', color: 'var(--text-secondary)' }}>
+                                        <div style={{ display: 'flex', gap: '20px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                                             <span style={{ display: 'flex', alignItems: 'center' }}><User size={16} style={{ marginRight: '6px' }} /> {selectedClient.contactName}</span>
-                                            <span style={{ display: 'flex', alignItems: 'center' }}><Phone size={16} style={{ marginRight: '6px' }} /> {selectedClient.phone}</span>
+                                            <a href={`tel:${selectedClient.phone || ''}`} style={{ display: 'flex', alignItems: 'center', color: 'var(--accent-blue)', textDecoration: 'none' }}><Phone size={16} style={{ marginRight: '6px' }} /> {selectedClient.phone || 'No phone'}</a>
+                                            <a href={`mailto:${selectedClient.email || ''}`} style={{ display: 'flex', alignItems: 'center', color: 'var(--accent-blue)', textDecoration: 'none' }}><Info size={16} style={{ marginRight: '6px' }} /> {selectedClient.email || 'No email'}</a>
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', gap: '10px' }}>
-                                        <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Phone size={18} /></button>
-                                        <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MoreHorizontal size={18} /></button>
+                                        {links.facebook && <a href={links.facebook} target="_blank" rel="noreferrer" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-primary)' }}><Facebook size={18} /></a>}
+                                        {links.google && <a href={links.google} target="_blank" rel="noreferrer" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-primary)' }}><Chrome size={18} /></a>}
+                                        {links.website && <a href={links.website} target="_blank" rel="noreferrer" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-primary)' }}><Globe size={18} /></a>}
                                     </div>
                                 </div>
 
-                                {/* Tab Content */}
-                                {activeTab === 'overview' && (
+                                {navTab !== 'clients' ? renderNavSpecificContent() : null}
+
+                                {activeTab === 'overview' && navTab === 'clients' && (
                                     <div className="animate-slide-up" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
                                         <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px' }}>
                                             <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center' }}><Info size={18} style={{ marginRight: '10px' }} /> Client Details</h3>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                                                 <div>
                                                     <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>Contact Email</label>
-                                                    <p style={{ fontSize: '16px', marginTop: '4px', color: 'var(--accent-blue)', fontWeight: 500 }}>{selectedClient.email}</p>
+                                                    <a href={`mailto:${selectedClient.email || ''}`} style={{ display: 'inline-block', fontSize: '16px', marginTop: '4px', color: 'var(--accent-blue)', fontWeight: 500, textDecoration: 'none' }}>{selectedClient.email || 'No email'}</a>
                                                 </div>
                                                 <div>
                                                     <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>Formatted Phone</label>
-                                                    <p style={{ fontSize: '16px', marginTop: '4px', color: 'var(--accent-blue)', fontWeight: 500 }}>{selectedClient.phone}</p>
+                                                    <a href={`tel:${selectedClient.phone || ''}`} style={{ display: 'inline-block', fontSize: '16px', marginTop: '4px', color: 'var(--accent-blue)', fontWeight: 500, textDecoration: 'none' }}>{selectedClient.phone || 'No phone'}</a>
                                                 </div>
                                                 <div style={{ gridColumn: 'span 2' }}>
                                                     <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>Service Industry</label>
@@ -801,37 +922,26 @@ const CRMView = ({ clients }) => {
                                                         {selectedClient.service}
                                                     </div>
                                                 </div>
-                                                <div style={{ gridColumn: 'span 2' }}>
-                                                    <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.5px' }}>Goals</label>
-                                                    <p style={{ marginTop: '4px', fontSize: '15px' }}>{selectedClient.goals}</p>
-                                                </div>
                                             </div>
                                         </div>
-
                                         <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                            <div>
-                                                <h3 style={{ marginBottom: '16px' }}>Quick Actions</h3>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '12px', fontSize: '14px' }}>
-                                                        <span style={{ color: 'var(--text-secondary)' }}>Budget</span>
-                                                        <span style={{ fontWeight: 600 }}>{selectedClient.budget}</span>
-                                                    </div>
-                                                    <div style={{ padding: '16px', background: 'rgba(255, 204, 0, 0.1)', color: '#b38f00', borderRadius: '12px', fontSize: '13px', lineHeight: 1.4 }}>
-                                                        <strong>Note:</strong> {selectedClient.notes || 'No notes available'}
-                                                    </div>
-                                                </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '12px', fontSize: '14px' }}>
+                                                <span style={{ color: 'var(--text-secondary)' }}>Budget</span>
+                                                <span style={{ fontWeight: 600 }}>{selectedClient.budget}</span>
+                                            </div>
+                                            <div style={{ padding: '16px', background: 'rgba(255, 204, 0, 0.1)', color: '#b38f00', borderRadius: '12px', fontSize: '13px', lineHeight: 1.4 }}>
+                                                <strong>Note:</strong> {selectedClient.notes || 'No notes available'}
                                             </div>
                                         </div>
                                     </div>
                                 )}
 
-                                {activeTab === 'meta' && (
+                                {activeTab === 'meta' && navTab === 'clients' && (
                                     <div className="animate-slide-up">
                                         {!mockData.meta ? (
                                             <div className="glass-panel" style={{ padding: '60px', borderRadius: '24px', textAlign: 'center' }}>
                                                 <Facebook size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
                                                 <h3>No Meta Account Linked</h3>
-                                                <p style={{ color: 'var(--text-secondary)' }}>Add a Meta ID to view metrics.</p>
                                             </div>
                                         ) : (
                                             <>
@@ -839,63 +949,16 @@ const CRMView = ({ clients }) => {
                                                     <Facebook size={16} /> Meta Ads ID: <strong style={{ color: 'var(--text-primary)' }}>{selectedClient.metaAccountId}</strong>
                                                 </div>
                                                 <div className="metrics-grid">
-                                                    <div className="metric-card">
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                            <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(0,113,227,0.1)', color: 'var(--accent-blue)' }}><Eye size={20} /></div>
-                                                            <span style={{ fontSize: '12px', color: 'var(--accent-green)', fontWeight: 700 }}>+12%</span>
-                                                        </div>
-                                                        <div>
-                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Impressions</p>
-                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.meta.impressions.toLocaleString()}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="metric-card">
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                            <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(52,199,89,0.1)', color: 'var(--accent-green)' }}><DollarSign size={20} /></div>
-                                                        </div>
-                                                        <div>
-                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Spend</p>
-                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>${mockData.meta.spend}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="metric-card">
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                            <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(175,82,222,0.1)', color: 'var(--accent-purple)' }}><MousePointer size={20} /></div>
-                                                        </div>
-                                                        <div>
-                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Clicks</p>
-                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.meta.clicks}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="glass-panel" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-                                                    <table className="custom-table">
-                                                        <thead style={{ background: 'var(--bg-tertiary)' }}>
-                                                            <tr>
-                                                                <th>Campaign</th>
-                                                                <th>Status</th>
-                                                                <th>Spend</th>
-                                                                <th>Results</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {mockData.meta.campaigns.map((c, i) => (
-                                                                <tr key={i}>
-                                                                    <td style={{ fontWeight: 500 }}>{c.name}</td>
-                                                                    <td><span className={`status-badge ${c.status === 'Active' ? 'status-active' : 'status-inactive'}`}>{c.status}</span></td>
-                                                                    <td>${c.spend.toFixed(2)}</td>
-                                                                    <td>{c.results}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                    <div className="metric-card"><p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Impressions</p><p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.meta.impressions.toLocaleString()}</p></div>
+                                                    <div className="metric-card"><p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Spend</p><p style={{ fontSize: '24px', fontWeight: 700 }}>${mockData.meta.spend}</p></div>
+                                                    <div className="metric-card"><p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Clicks</p><p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.meta.clicks}</p></div>
                                                 </div>
                                             </>
                                         )}
                                     </div>
                                 )}
 
-                                {activeTab === 'google' && (
+                                {activeTab === 'google' && navTab === 'clients' && (
                                     <div className="animate-slide-up">
                                         {!mockData.google ? (
                                             <div className="glass-panel" style={{ padding: '60px', borderRadius: '24px', textAlign: 'center' }}>
@@ -903,32 +966,14 @@ const CRMView = ({ clients }) => {
                                                 <h3>No Google Ads Account Linked</h3>
                                             </div>
                                         ) : (
-                                            <>
-                                                <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
-                                                    <Chrome size={16} /> Google Ads ID: <strong style={{ color: 'var(--text-primary)' }}>{selectedClient['Google Ads ID']}</strong>
-                                                </div>
-                                                <div className="metrics-grid">
-                                                    <div className="metric-card">
-                                                        <div style={{ padding: '8px', width: 'fit-content', borderRadius: '8px', background: 'rgba(255,59,48,0.1)', color: 'var(--accent-red)' }}><DollarSign size={20} /></div>
-                                                        <div>
-                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Cost</p>
-                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>${mockData.google.cost}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="metric-card">
-                                                        <div style={{ padding: '8px', width: 'fit-content', borderRadius: '8px', background: 'rgba(52,199,89,0.1)', color: 'var(--accent-green)' }}><CheckCircle size={20} /></div>
-                                                        <div>
-                                                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Conversions</p>
-                                                            <p style={{ fontSize: '24px', fontWeight: 700 }}>{mockData.google.conversions}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </>
+                                            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
+                                                <Chrome size={16} /> Google Ads ID: <strong style={{ color: 'var(--text-primary)' }}>{selectedClient['Google Ads ID']}</strong>
+                                            </div>
                                         )}
                                     </div>
                                 )}
 
-                                {activeTab === 'billing' && (
+                                {activeTab === 'billing' && navTab === 'clients' && (
                                     <div className="animate-slide-up">
                                         {!mockData.stripe ? (
                                             <div className="glass-panel" style={{ padding: '60px', borderRadius: '24px', textAlign: 'center' }}>
@@ -936,57 +981,23 @@ const CRMView = ({ clients }) => {
                                                 <h3>No Billing Account Connected</h3>
                                             </div>
                                         ) : (
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
-                                                <div className="glass-panel" style={{ padding: '30px', borderRadius: '24px', background: 'linear-gradient(135deg, #af52de, #5856d6)', color: 'white', border: 'none' }}>
-                                                    <p style={{ opacity: 0.8, fontSize: '14px', fontWeight: 500 }}>Current MRR</p>
-                                                    <p style={{ fontSize: '42px', fontWeight: 700, margin: '10px 0 30px' }}>${mockData.stripe.mrr}</p>
-                                                    <div style={{ background: 'rgba(255,255,255,0.2)', padding: '16px', borderRadius: '16px', backdropFilter: 'blur(10px)' }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
-                                                            <span>Status</span>
-                                                            <span style={{ fontWeight: 700 }}>Active</span>
-                                                        </div>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                                                            <span>Next Bill</span>
-                                                            <span style={{ fontWeight: 700 }}>{mockData.stripe.nextBillingDate}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="glass-panel" style={{ borderRadius: '24px', padding: '24px' }}>
-                                                    <h3 style={{ marginBottom: '20px' }}>Recent Invoices</h3>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                                        {mockData.stripe.invoices.map((inv, i) => (
-                                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'var(--bg-tertiary)', borderRadius: '12px' }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <FileText size={18} style={{ marginRight: '12px', color: 'var(--text-secondary)' }} />
-                                                                    <div>
-                                                                        <p style={{ fontWeight: 600, fontSize: '14px' }}>Invoice #{inv.id}</p>
-                                                                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{inv.date}</p>
-                                                                    </div>
-                                                                </div>
-                                                                <div style={{ textAlign: 'right' }}>
-                                                                    <p style={{ fontWeight: 700 }}>${inv.amount.toFixed(2)}</p>
-                                                                    <span style={{ fontSize: '10px', color: 'var(--accent-green)', fontWeight: 700 }}>PAID</span>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
+                                            <div className="glass-panel" style={{ borderRadius: '24px', padding: '24px' }}>
+                                                <h3 style={{ marginBottom: '12px' }}>Current MRR</h3>
+                                                <p style={{ fontSize: '34px', fontWeight: 700 }}>${mockData.stripe.mrr}</p>
                                             </div>
                                         )}
                                     </div>
                                 )}
-                                
-                                {(activeTab === 'seo' || activeTab === 'activity') && (
+
+                                {(activeTab === 'seo' || activeTab === 'activity') && navTab === 'clients' && (
                                     <div className="animate-slide-up glass-panel" style={{ padding: '80px', borderRadius: '24px', textAlign: 'center' }}>
-                                        {activeTab === 'seo' ? (
-                                            <Globe size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
-                                        ) : (
-                                            <Activity size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
-                                        )}
+                                        {activeTab === 'seo' ? <Globe size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} /> : <Activity size={48} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />}
                                         <h3>{activeTab.toUpperCase()} Data</h3>
                                         <p style={{ color: 'var(--text-secondary)' }}>Live feed connecting...</p>
                                     </div>
                                 )}
+
+                                {(activeTab === 'messages' || activeTab === 'tickets') && navTab === 'clients' && renderNavSpecificContent()}
                             </div>
                         </div>
                     </>
